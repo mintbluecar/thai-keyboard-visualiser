@@ -1,0 +1,71 @@
+<h2>Option B, round 3</h2>
+<p class="subtitle">Click this page, then type and hold Shift. Each key shows the Thai letter plus the English key in blue. Holding Shift swaps the Thai letters to their Shift versions.</p>
+
+<style>
+  .kb { background:#1e1e22; border-radius:14px; padding:12px; display:inline-block; box-shadow:0 8px 30px rgba(0,0,0,.35); }
+  .kb-row { display:flex; gap:6px; margin-bottom:6px; }
+  .kb-row:last-child { margin-bottom:0; }
+  .k { --bg:#3a3a40; position:relative; width:58px; height:58px; border-radius:8px; background:var(--bg); color:#f2f2f2;
+       display:flex; align-items:center; justify-content:center; font-size:28px; padding-top:8px; box-sizing:border-box;
+       font-family:"Thonburi","Sukhumvit Set",sans-serif; user-select:none; }
+  .k.mod { font-size:12px; color:#aaa; font-family:-apple-system,sans-serif; padding-top:0; }
+  .k.down { --bg:#e8a23a; color:#111; transform:translateY(1px); }
+  .k.mod.on { background:#5a6cff; color:#fff; }
+  .k .latin { position:absolute; left:6px; top:4px; font-size:14px; font-weight:700; color:#7cc4ff; font-family:-apple-system,sans-serif; }
+  .k.down .latin { color:#2a2a2a; }
+  /* Vowel/tone marks: draw on a hidden base letter so the font doesn't add its dotted circle */
+  .mark { position:relative; display:inline-block; }
+  .mark .hide { position:absolute; left:0; top:0; color:var(--bg); -webkit-text-stroke:2px var(--bg); }
+  .w15{width:88px}.w175{width:104px}.w225{width:138px}.space{width:320px}
+  .mock-wrap { padding:20px; background:linear-gradient(135deg,#6b7fa8,#a87a8f); border-radius:10px; text-align:center; }
+</style>
+
+<div class="mock-wrap"><div class="kb" id="kb"></div></div>
+
+<script>
+(function(){
+  const rows = [
+    [["Backquote","`","_","%"],["Digit1","1","ๅ","+"],["Digit2","2","/","๑"],["Digit3","3","-","๒"],["Digit4","4","ภ","๓"],["Digit5","5","ถ","๔"],["Digit6","6","ุ","ู"],["Digit7","7","ึ","฿"],["Digit8","8","ค","๕"],["Digit9","9","ต","๖"],["Digit0","0","จ","๗"],["Minus","-","ข","๘"],["Equal","=","ช","๙"],["Backspace","delete",null,null,"w15"]],
+    [["Tab","tab",null,null,"w15"],["KeyQ","Q","ๆ","๐"],["KeyW","W","ไ","\""],["KeyE","E","ำ","ฎ"],["KeyR","R","พ","ฑ"],["KeyT","T","ะ","ธ"],["KeyY","Y","ั","ํ"],["KeyU","U","ี","๊"],["KeyI","I","ร","ณ"],["KeyO","O","น","ฯ"],["KeyP","P","ย","ญ"],["BracketLeft","[","บ","ฐ"],["BracketRight","]","ล",","],["Backslash","\\","ฃ","ฅ"]],
+    [["CapsLock","caps",null,null,"w175"],["KeyA","A","ฟ","ฤ"],["KeyS","S","ห","ฆ"],["KeyD","D","ก","ฏ"],["KeyF","F","ด","โ"],["KeyG","G","เ","ฌ"],["KeyH","H","้","็"],["KeyJ","J","่","๋"],["KeyK","K","า","ษ"],["KeyL","L","ส","ศ"],["Semicolon",";","ว","ซ"],["Quote","'","ง","."],["Enter","return",null,null,"w175"]],
+    [["ShiftLeft","shift",null,null,"w225"],["KeyZ","Z","ผ","("],["KeyX","X","ป",")"],["KeyC","C","แ","ฉ"],["KeyV","V","อ","ฮ"],["KeyB","B","ิ","ฺ"],["KeyN","N","ื","์"],["KeyM","M","ท","?"],["Comma",",","ม","ฒ"],["Period",".","ใ","ฬ"],["Slash","/","ฝ","ฦ"],["ShiftRight","shift",null,null,"w225"]],
+    [["Space","",null,null,"space"]]
+  ];
+  const combining = /[ัิ-ฺ็-๎]/;
+  const BASE = "อ"; // อ, hidden underneath the mark
+  const show = c => combining.test(c)
+    ? `<span class="mark">${BASE}${c}<span class="hide">${BASE}</span></span>`
+    : c;
+
+  const kb = document.getElementById("kb"), keys = {};
+  rows.forEach(r => {
+    const row = document.createElement("div"); row.className = "kb-row";
+    r.forEach(([code, latin, th, ths, w]) => {
+      const k = document.createElement("div");
+      k.className = "k" + (th ? "" : " mod") + (w ? " " + w : "");
+      if (!th) k.textContent = latin;
+      row.appendChild(k); keys[code] = {el:k, latin, th, ths};
+    });
+    kb.appendChild(row);
+  });
+  function render(shift){
+    Object.values(keys).forEach(({el, latin, th, ths}) => {
+      if (th) el.innerHTML = `<span class="latin">${latin}</span>${show(shift ? ths : th)}`;
+    });
+    ["ShiftLeft","ShiftRight"].forEach(c => keys[c].el.classList.toggle("on", shift));
+  }
+  render(false);
+  let shift = false;
+  const setShift = on => { if (on !== shift) { shift = on; render(on); } };
+  document.addEventListener("keydown", e => {
+    if (["Space","Tab","Quote","Slash","Backquote"].includes(e.code)) e.preventDefault();
+    setShift(e.shiftKey);
+    keys[e.code] && keys[e.code].el.classList.add("down");
+  });
+  document.addEventListener("keyup", e => {
+    setShift(e.shiftKey);
+    keys[e.code] && keys[e.code].el.classList.remove("down");
+  });
+  window.addEventListener("blur", () => { setShift(false); document.querySelectorAll(".k.down").forEach(k => k.classList.remove("down")); });
+})();
+</script>
