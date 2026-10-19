@@ -18,10 +18,8 @@ final class KeyboardView: NSView {
     // Proportions at scale 1 (Global Constraints).
     static let keySize: CGFloat = 58
     static let keyGap: CGFloat = 6
-    /// Wide enough on every side for the × to sit in the top-right corner.
+    /// Wide enough on every side for the close button to sit above the keys.
     static let padding: CGFloat = 28
-    /// The × button's side: centred in the top padding, right-aligned with the keys.
-    static let closeButtonSize: CGFloat = 20
     private static let keyRadius: CGFloat = 8
     private static let panelRadius: CGFloat = 14
     private static let thaiSize: CGFloat = 28
@@ -29,6 +27,11 @@ final class KeyboardView: NSView {
     private static let cornerSize: CGFloat = 14
     private static let cornerInset = CGPoint(x: 6, y: 4)
     private static let modifierSize: CGFloat = 12
+    /// Resize grip: diagonal lines in the bottom-right padding. macOS won't
+    /// let a background app change the cursor, so the grip is the hint
+    /// that the window can be resized.
+    private static let gripCorner = CGPoint(x: 9, y: 9)
+    private static let gripLengths: [CGFloat] = [4, 8, 12]
 
     /// The whole panel at scale 1: keys plus gaps plus padding.
     static var designSize: CGSize {
@@ -39,7 +42,9 @@ final class KeyboardView: NSView {
         )
     }
 
-    /// The × button; the view sizes and places it so it scales with the window.
+    /// The close button. The view places it at the top left, vertically
+    /// centred in the padding and left-aligned with the keys; it keeps the
+    /// system's own size, like a window's traffic lights.
     var closeButton: NSButton? {
         didSet {
             oldValue?.removeFromSuperview()
@@ -52,12 +57,9 @@ final class KeyboardView: NSView {
         super.layout()
         guard let closeButton else { return }
         let scale = bounds.width / Self.designSize.width
-        let side = Self.closeButtonSize * scale
-        let inset = (Self.padding - Self.closeButtonSize) / 2 * scale
-        closeButton.frame = CGRect(x: bounds.maxX - Self.padding * scale - side,
-                                   y: bounds.maxY - inset - side, width: side, height: side)
-        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Hide keyboard")?
-            .withSymbolConfiguration(.init(pointSize: side * 0.9, weight: .regular))
+        let size = closeButton.frame.size
+        closeButton.setFrameOrigin(CGPoint(x: Self.padding * scale,
+                                           y: bounds.maxY - (Self.padding * scale + size.height) / 2))
     }
 
     // Colours (Global Constraints and the approved mockup).
@@ -99,7 +101,22 @@ final class KeyboardView: NSView {
             drawKey(key, design: design, resolver: resolver, cornerFont: cornerFont,
                     modifierFont: modifierFont, context: context)
         }
+        drawResizeGrip(design: design, context: context)
         context.restoreGState()
+    }
+
+    /// Three short diagonal lines in the bottom-right corner, inside the
+    /// rounded edge and clear of the keys.
+    private func drawResizeGrip(design: CGSize, context: CGContext) {
+        let corner = CGPoint(x: design.width - Self.gripCorner.x, y: Self.gripCorner.y)
+        context.setStrokeColor(Colour.modifier)
+        context.setLineWidth(1.5)
+        context.setLineCap(.round)
+        for length in Self.gripLengths {
+            context.move(to: CGPoint(x: corner.x - length, y: corner.y))
+            context.addLine(to: CGPoint(x: corner.x, y: corner.y + length))
+        }
+        context.strokePath()
     }
 
     private func drawKey(_ key: KeySpec, design: CGSize, resolver: FontResolver, cornerFont: CTFont,

@@ -36,14 +36,9 @@ final class KeyboardPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A round × in the top padding above the keys. KeyboardView sizes and
-    /// places it, so it scales with the window.
+    /// A red traffic-light close button. KeyboardView places it top left.
     private func makeCloseButton() -> NSButton {
-        let button = NSButton(title: "", target: self, action: #selector(closeClicked))
-        button.isBordered = false
-        button.imagePosition = .imageOnly
-        button.imageScaling = .scaleProportionallyUpOrDown
-        button.contentTintColor = .secondaryLabelColor
+        let button = CloseButton(target: self, action: #selector(closeClicked))
         button.toolTip = "Hide keyboard until the input source changes"
         return button
     }
