@@ -33,9 +33,20 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
    - Settings… (font, opacity, size, hotkeys, start at login);
    - Quit.
 10. **Hiding while in Thai.** The keyboard can be hidden two ways: the menu's Hide keyboard item, or a small **×** close button on the keyboard window itself. Either one hides it only until the input source changes. Switching away from Thai and back shows it again. The hidden state is not saved: if the app launches while Thai is active, the keyboard shows. Choosing Show keyboard from the menu brings it back at any time. Users who don't want it at all can quit the app.
-11. **Caps Lock in Thai.** In the macOS Thai layout, Caps Lock on types plain English letters while the Thai input source stays active (checked on the user's Mac with `UCKeyTranslate`). By default the keyboard **hides while Caps Lock is on** and reappears when it is turned off (unless the user had hidden it with Hide/×, which still lasts until the input source changes). A Settings toggle, off by default, changes this to **show the keyboard with the English letters Caps Lock types** (big letter in the key centre; the blue corner letter can be left off since it would repeat). If the user has macOS's "Use Caps Lock to switch to and from ABC" turned on, Caps Lock switches input source instead and the normal hide-on-non-Thai rule covers it.
+11. **Caps Lock in Thai.** By default the keyboard **hides while Caps Lock changes what the keys type**, and reappears when Caps Lock is turned off (unless the user had hidden it with Hide/×, which still lasts until the input source changes). A Settings toggle (off by default) changes this to **show what Caps Lock types** on each key: the big centre character comes from the layout's Caps Lock state, and the blue corner letter is left off if it would just repeat the centre one. Whether Caps Lock changes anything is read from the layout (see Goal 14), never assumed: if Caps Lock makes no difference in the active layout, the keyboard stays as normal. On the user's Mac today, Caps Lock in the Thai layout types plain English letters q w e a s d… (checked with `UCKeyTranslate`). If the user has macOS's "Use Caps Lock to switch to and from ABC" on, Caps Lock switches input source instead, and the hide-on-non-Thai rule covers it with no special case.
 12. No Dock icon.
 13. Starts automatically at login (user asked for this; on by default, can be turned off in Settings).
+14. **Read the real behaviour, don't assume it** (user's requirement). Everything shown comes from what the user's Mac actually does, not from built-in expectations:
+    - Each time the input source changes (and at launch), read the active layout's characters for every key in each state: plain, Shift, Caps Lock, Caps Lock + Shift. Shift and Caps Lock display use exactly these results. A key the layout gives no character for shows blank.
+    - Caps Lock and Shift state come from the live modifier flags, not from counting presses.
+    - The keyboard shape drawn matches the physical keyboard type macOS reports (ANSI / ISO / JIS). ANSI (the user's MacBook) is required. For ISO or JIS, still draw ANSI but say so in the check below.
+    - **Compatibility check** in Settings: one plain-language line for each of these:
+      - the active input source and whether it counts as Thai;
+      - the keyboard type detected;
+      - whether Input Monitoring is granted;
+      - what Caps Lock does in this layout (types different characters / no effect).
+      
+      Items that need the user to act (no permission, keyboard type not matched) also show in the menu bar menu.
 
 ## Non-goals
 
@@ -70,7 +81,8 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
 - Menu bar icon with show/hide toggle; no Dock icon.
 - Hide (menu or × on the window) lasts until the input source changes; switching back to Thai shows it again. Quit is how to turn it off entirely.
 - Start at login.
-- Caps Lock on in Thai: hide by default; Settings toggle to show English letters instead.
+- Caps Lock on in Thai: hide by default; Settings toggle to show what Caps Lock types instead.
+- The app reads real behaviour from the Mac (layout, modifiers, keyboard type) rather than assuming it, with a compatibility check the user can see.
 - Project lives at `~/developer/personal/embn/thai-keyboard/`.
 
 ## Claude's calls (user can override)
