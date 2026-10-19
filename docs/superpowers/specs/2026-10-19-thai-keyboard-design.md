@@ -1,7 +1,7 @@
 # Thai Keyboard Overlay — Design
 
 Date: 2026-10-19
-Status: awaiting user approval
+Status: approved 2026-10-19
 
 ## Intent
 
