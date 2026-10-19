@@ -33,8 +33,9 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
    - Settings… (font, opacity, size, hotkeys, start at login);
    - Quit.
 10. **Hiding while in Thai.** The keyboard can be hidden two ways: the menu's Hide keyboard item, or a small **×** close button on the keyboard window itself. Either one hides it only until the input source changes. Switching away from Thai and back shows it again. The hidden state is not saved: if the app launches while Thai is active, the keyboard shows. Choosing Show keyboard from the menu brings it back at any time. Users who don't want it at all can quit the app.
-11. No Dock icon.
-12. Starts automatically at login (user asked for this; on by default, can be turned off in Settings).
+11. **Caps Lock in Thai.** In the macOS Thai layout, Caps Lock on types plain English letters while the Thai input source stays active (checked on the user's Mac with `UCKeyTranslate`). By default the keyboard **hides while Caps Lock is on** and reappears when it is turned off (unless the user had hidden it with Hide/×, which still lasts until the input source changes). A Settings toggle, off by default, changes this to **show the keyboard with the English letters Caps Lock types** (big letter in the key centre; the blue corner letter can be left off since it would repeat). If the user has macOS's "Use Caps Lock to switch to and from ABC" turned on, Caps Lock switches input source instead and the normal hide-on-non-Thai rule covers it.
+12. No Dock icon.
+13. Starts automatically at login (user asked for this; on by default, can be turned off in Settings).
 
 ## Non-goals
 
@@ -55,12 +56,13 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
 
 - User's machine: MacBook built-in keyboard, macOS 26.1 (Apple silicon).
 - Thai input source in use: macOS built-in **"Thai"** keyboard layout (Kedmanee), `KeyboardLayout ID = -26624`. Detection should key off the input source's language being Thai (e.g. `kTISPropertyInputSourceLanguages` contains `th`) rather than this one ID, so "Thai – Pattachote" or another Thai source would also work.
-- Toolchain on the machine: **Command Line Tools only (no Xcode)**, Swift 5.8.1, SDKs up to macOS 13.3. The app must build with SwiftPM from the command line, with a script that assembles the `.app` bundle (Info.plist with `LSUIElement` for no Dock icon) and ad-hoc code-signs it. Use only APIs available in the macOS 13 SDK.
-- Reading global key presses requires the **Input Monitoring** permission. The app must handle not having it: still show the keyboard, and show a clear one-line notice (and a menu item) explaining how to grant it. Note for the builder: with ad-hoc signing, macOS may ask for the permission again after each rebuild — acceptable for a personal app, but say so in the README.
+- Toolchain: **latest Xcode and Swift** (user's decision: "let's use the latest software"). The user will install Xcode from the App Store before building; the machine currently has only old Command Line Tools (Swift 5.8, macOS 13 SDK), which are not to be used. Target the current macOS (26) and its SDK; newer APIs are fine.
+- Signing: sign with the user's free Apple ID "Personal Team" development certificate in Xcode, so the code signature stays stable across rebuilds and macOS remembers the Input Monitoring permission.
+- Reading global key presses requires the **Input Monitoring** permission. The app must handle not having it: still show the keyboard, and show a clear one-line notice (and a menu item) explaining how to grant it.
 
 ## Decided with the user
 
-- Native macOS app (user agreed to this default).
+- Native macOS app (user agreed to this default), built with the latest Xcode.
 - Key-face design: option "B" from the mockups — large Thai character + blue English letter top-left; Shift characters appear only while Shift is held.
 - Visible only when input source is Thai; hidden otherwise.
 - Font, opacity, size adjustable; keyboard keeps its shape when resized.
@@ -68,6 +70,7 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
 - Menu bar icon with show/hide toggle; no Dock icon.
 - Hide (menu or × on the window) lasts until the input source changes; switching back to Thai shows it again. Quit is how to turn it off entirely.
 - Start at login.
+- Caps Lock on in Thai: hide by default; Settings toggle to show English letters instead.
 - Project lives at `~/developer/personal/embn/thai-keyboard/`.
 
 ## Claude's calls (user can override)
@@ -86,7 +89,7 @@ What makes it useful (and what existing options like macOS's Keyboard Viewer don
 - Defaults: bottom-centre of the main screen, about 60% of screen width, opacity 90%, system Thai font, start at login on.
 - Visual style follows the approved mockup, saved next to this doc as `2026-10-19-thai-keyboard-mockup.html` (open in a browser; ignore how it draws vowel marks — that's the browser problem Goal 5 exists to fix). Proportions at a 58 pt key: Thai character 28 pt, centred, nudged ~8 pt below centre to leave room for the English letter; English letter 14 pt bold, inset 6 pt left / 4 pt top; key corner radius 8; gap between keys 6; panel padding 12 with radius 14. Everything scales with the window.
 - Visual style: dark keys on a dark rounded panel; held key turns amber (`#e8a23a`) with dark text; held Shift keys turn blue-violet (`#5a6cff`). Non-character keys (delete, tab, caps, return, shift, space, and the bottom row modifiers) are drawn with small grey English labels and no Thai.
-- Only Shift changes the labels. Caps Lock and Option layers are ignored (Goal 3 wins over Goal 6 for those).
+- Option layer is ignored: in the Thai layout it types nothing.
 - Settings persisted with `UserDefaults`. Start at login via `SMAppService.mainApp`.
 - Menu bar icon: a simple template glyph (e.g. "ก" or a keyboard symbol).
 
