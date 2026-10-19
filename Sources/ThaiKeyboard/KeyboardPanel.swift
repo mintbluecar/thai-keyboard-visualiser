@@ -36,9 +36,14 @@ final class KeyboardPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A red traffic-light close button. KeyboardView places it top left.
+    /// The system's own close button (the window traffic light). The panel
+    /// never becomes key, so macOS draws it in its grey inactive style.
+    /// KeyboardView places it top left.
     private func makeCloseButton() -> NSButton {
-        let button = CloseButton(target: self, action: #selector(closeClicked))
+        let button = NSWindow.standardWindowButton(.closeButton, for: [.titled, .closable])
+            ?? NSButton(title: "×", target: nil, action: nil)
+        button.target = self
+        button.action = #selector(closeClicked)
         button.toolTip = "Hide keyboard until the input source changes"
         return button
     }
