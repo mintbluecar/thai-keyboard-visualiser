@@ -57,7 +57,10 @@ final class KeyboardView: NSView {
         let scale = bounds.width / Self.designSize.width
         let side = Self.padding * scale
         closeButton.frame = CGRect(x: bounds.maxX - 2 * side, y: bounds.maxY - side, width: side, height: side)
-        closeButton.font = .systemFont(ofSize: side - 1)
+        // xmark fills its box, unlike the "×" character, which only uses
+        // about half of it.
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Hide keyboard")?
+            .withSymbolConfiguration(.init(pointSize: side * 0.7, weight: .bold))
     }
 
     // Colours (Global Constraints and the approved mockup).
