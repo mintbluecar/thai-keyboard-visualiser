@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ThaiKeyboardCore
 
 /// Owns the app's top-level UI and state: follows the input source and the
@@ -20,16 +21,24 @@ final class AppController {
     private var visibility = Visibility(isThai: false)
     private var pressed = PressedKeys()
     /// The hotkeys `HotkeyCenter.register` couldn't register, surfaced in
-    /// the compatibility report.
-    private var failedHotkeys: Set<HotkeyAction> = []
+    /// the compatibility report. Settings reads this to mark those rows.
+    private(set) var failedHotkeys: Set<HotkeyAction> = []
 
-    private let prefs = Preferences()
+    let prefs = Preferences()
     /// Set while `restoreFrame()` is moving/resizing the panel
     /// programmatically, so that doesn't get saved back as a user move.
     private var isRestoringFrame = false
-    /// Set if `LoginItem.apply` throws on first launch. Settings (Task 9)
-    /// will surface this to the user; nothing about it is logged here.
-    private var firstLaunchLoginItemError: Error?
+    /// Set if `LoginItem.apply` throws on first launch. Settings surfaces
+    /// this to the user; nothing about it is logged here.
+    private(set) var firstLaunchLoginItemError: Error?
+
+    /// Called whenever `compatibilityReport()` might have changed (the end
+    /// of every `recompute()`). `SettingsModel` subscribes while its
+    /// window exists, to keep its compatibility section live.
+    var onCompatibilityChanged: (() -> Void)?
+
+    private var settingsWindow: NSWindow?
+    private var settingsModel: SettingsModel?
 
     /// Whether to show what Caps Lock types instead of hiding the panel.
     private var showCapsOutput: Bool { prefs.showCapsOutput }
@@ -44,7 +53,7 @@ final class AppController {
         panel.setFrame(Placement.defaultFrame(visible: visible, aspect: KeyboardPanel.aspect), display: false)
 
         statusMenu.onQuit = { NSApp.terminate(nil) }
-        statusMenu.onSettings = {}  // Settings window arrives in Task 9.
+        statusMenu.onSettings = { [weak self] in self?.showSettings() }
 
         let preview = PreviewOptions(arguments: CommandLine.arguments)
         if preview.isActive {
@@ -157,12 +166,13 @@ final class AppController {
                 : StatusMenu.ActionItem(title)
         }
         statusMenu.update(isShown: shouldShow, actionItems: actionItems)
+        onCompatibilityChanged?()
     }
 
     /// The current compatibility snapshot: input source, physical keyboard,
     /// Input Monitoring permission, Caps Lock behaviour, and any hotkeys
     /// that failed to register.
-    private func compatibilityReport() -> CompatibilityReport {
+    func compatibilityReport() -> CompatibilityReport {
         CompatibilityReport(
             inputSource: SystemLayout.current(),
             keyboardType: SystemLayout.keyboardType(),
@@ -258,6 +268,102 @@ final class AppController {
         defaults.set(true, forKey: Self.firstLaunchKey)
     }
 
+    // MARK: Settings
+
+    /// Shows the Settings window, creating it (and its `SettingsModel`)
+    /// the first time. It's the one window besides the panel, and the one
+    /// allowed to become key, so this activates the app.
+    func showSettings() {
+        if settingsWindow == nil {
+            let model = SettingsModel(controller: self)
+            let hosting = NSHostingController(rootView: SettingsView(model: model))
+            let window = NSWindow(contentViewController: hosting)
+            window.title = "ThaiKeyboard Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            settingsModel = model
+            settingsWindow = window
+        }
+        settingsModel?.refreshCompatibility()
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// Applies `family` (`nil` = system Thai) to the keyboard immediately
+    /// and persists it (Settings' font picker).
+    func applyFontFamily(_ family: String?) {
+        prefs.fontFamily = family
+        panel.keyboardView.fontFamily = family
+    }
+
+    /// Applies `opacity` (clamped to `0.2...1.0` by `Preferences`) to the
+    /// panel immediately and persists it (Settings' opacity slider).
+    func applyOpacity(_ opacity: Double) {
+        prefs.opacity = opacity
+        panel.alphaValue = CGFloat(prefs.opacity)
+    }
+
+    /// Persists `show` and recomputes the panel's display mode
+    /// immediately (Settings' Caps Lock toggle).
+    func applyShowCapsOutput(_ show: Bool) {
+        prefs.showCapsOutput = show
+        recompute()
+    }
+
+    /// Resizes the panel to `percent` (clamped to `0.25...1.0`) of its
+    /// current screen's visible width, about its current centre, the same
+    /// way a hotkey resize is clamped (Settings' size slider), then saves
+    /// the frame.
+    func applySizePercent(_ percent: Double) {
+        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let centre = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+
+        var width = visible.width * min(max(percent, 0.25), 1.0)
+        let maxWidth = max(Placement.minWidth, visible.width - 2 * Placement.margin)
+        width = min(max(width, Placement.minWidth), maxWidth)
+        let height = width / KeyboardPanel.aspect
+
+        let resized = CGRect(x: centre.x - width / 2, y: centre.y - height / 2, width: width, height: height)
+        let newFrame = Placement.clamped(resized, in: visible)
+        panel.setFrame(newFrame, display: true)
+        prefs.frame = newFrame
+    }
+
+    /// The panel's current width as a fraction of its screen's visible
+    /// width — the size slider's initial value.
+    func currentSizePercent() -> Double {
+        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        guard visible.width > 0 else { return 0.6 }
+        return Double(panel.frame.width / visible.width)
+    }
+
+    /// Persists `on` as the desired login-item state and applies it via
+    /// `LoginItem.apply`. Returns the thrown error's description for
+    /// Settings to show inline, or `nil` on success.
+    @discardableResult
+    func applyStartAtLogin(_ on: Bool) -> String? {
+        prefs.startAtLogin = on
+        do {
+            try LoginItem.apply(on)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Persists `bindings`, re-registers them with the Hot Key Manager,
+    /// and refreshes the status menu's compatibility lines to match
+    /// (Settings' hotkey recorders and "Reset to defaults").
+    @discardableResult
+    func applyHotkeys(_ bindings: [HotkeyAction: HotkeyBinding]) -> Set<HotkeyAction> {
+        prefs.hotkeys = bindings
+        failedHotkeys = hotkeyCenter?.register(bindings) ?? []
+        recompute()
+        return failedHotkeys
+    }
+
     // MARK: Preview
 
     /// `--preview-mode` / `--font` / `--snapshot`: show the Thai layout in
@@ -273,6 +379,23 @@ final class AppController {
             if panel.isVisible { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
         }
 
+        if preview.openSettings {
+            showSettings()
+            if let path = preview.snapshotPath, let model = settingsModel {
+                DispatchQueue.main.async {
+                    // `ImageRenderer` shows a placeholder, not its real
+                    // content, for the font sample's `NSViewRepresentable`
+                    // (every other section renders correctly); the same
+                    // `GlyphDrawing.drawCentred` call it makes is already
+                    // checked for clean marks via the keyboard panel's own
+                    // `--snapshot`.
+                    let ok = Self.writeSwiftUISnapshot(SettingsView(model: model).sections.frame(width: 460), to: path)
+                    if ok { NSApp.terminate(nil) } else { exit(1) }
+                }
+            }
+            return
+        }
+
         if let path = preview.snapshotPath {
             let view = panel.keyboardView
             DispatchQueue.main.async {
@@ -282,6 +405,20 @@ final class AppController {
             return
         }
         panel.orderFrontRegardless()
+    }
+
+    /// Renders a SwiftUI view (used for the Settings window) straight to a
+    /// PNG via `ImageRenderer` — the content isn't drawn through
+    /// `-drawRect:` or a plain `CALayer`, so capturing its hosting window
+    /// (`cacheDisplay`, `CALayer.render(in:)`) comes back blank; rendering
+    /// the view itself is the documented way around that.
+    private static func writeSwiftUISnapshot(_ view: some View, to path: String) -> Bool {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.cgImage else { return false }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return false }
+        return (try? png.write(to: URL(fileURLWithPath: path))) != nil
     }
 
     /// Renders `view` offscreen at its current size into a PNG at `path`.
@@ -294,13 +431,16 @@ final class AppController {
 }
 
 /// Debug/preview launch arguments (used to render screenshots):
-/// `--preview-mode plain|shift|caps`, `--font "<family>"`, and
-/// `--snapshot <png path>` (render the keyboard offscreen, then quit).
+/// `--preview-mode plain|shift|caps`, `--font "<family>"`,
+/// `--open-settings` (show the Settings window instead of the panel), and
+/// `--snapshot <png path>` (render the keyboard, or the Settings window
+/// with `--open-settings`, offscreen, then quit).
 private struct PreviewOptions {
     var mode: DisplayMode = .thai(.plain)
     var shiftHeld = false
     var fontFamily: String?
     var snapshotPath: String?
+    var openSettings = false
     /// `true` when any preview flag was given.
     var isActive = false
 
@@ -316,7 +456,8 @@ private struct PreviewOptions {
         }
         fontFamily = value(after: "--font")
         snapshotPath = value(after: "--snapshot")
-        isActive = ["--preview-mode", "--font", "--snapshot"].contains { arguments.contains($0) }
+        openSettings = arguments.contains("--open-settings")
+        isActive = ["--preview-mode", "--font", "--snapshot", "--open-settings"].contains { arguments.contains($0) }
     }
 
     /// `fontFamily` (`--font`) wins when given; otherwise falls back to
