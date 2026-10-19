@@ -39,4 +39,30 @@ final class VisibilityTests: XCTestCase {
     func test_newLaunchInThaiIsVisible() {
         XCTAssertTrue(Visibility(isThai: true).isVisible(hiddenForCaps: false))
     }
+
+    func test_userShowShowsEvenWhenNotThai() {
+        var v = Visibility(isThai: false)
+        v.userShow()
+        XCTAssertTrue(v.isVisible(hiddenForCaps: false))
+    }
+
+    func test_userShowOverridesCapsHide() {
+        var v = Visibility(isThai: true)
+        v.userShow()
+        XCTAssertTrue(v.isVisible(hiddenForCaps: true))
+    }
+
+    func test_sourceChangeEndsUserShow() {
+        var v = Visibility(isThai: false)
+        v.userShow()
+        v.inputSourceChanged(isThai: false)
+        XCTAssertFalse(v.isVisible(hiddenForCaps: false))
+    }
+
+    func test_userHideEndsUserShow() {
+        var v = Visibility(isThai: false)
+        v.userShow()
+        v.userHide()
+        XCTAssertFalse(v.isVisible(hiddenForCaps: false))
+    }
 }

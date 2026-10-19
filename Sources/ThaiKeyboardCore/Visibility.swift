@@ -9,29 +9,39 @@ public struct Visibility: Equatable, Sendable {
     /// shows it again.
     public private(set) var userHidden: Bool
 
+    /// `true` once the user has explicitly shown the panel: it then shows
+    /// whatever the input source or Caps Lock, so Show never seems to do
+    /// nothing. Lasts until the user hides it or the input source changes.
+    public private(set) var userShown: Bool
+
     public init(isThai: Bool) {
         self.isThai = isThai
         self.userHidden = false
+        self.userShown = false
     }
 
     /// Call whenever the active input source changes. Always clears a
-    /// user-hide, even when switching between two Thai sources.
+    /// user hide or show, even when switching between two Thai sources.
     public mutating func inputSourceChanged(isThai: Bool) {
         self.isThai = isThai
         self.userHidden = false
+        self.userShown = false
     }
 
     public mutating func userHide() {
         userHidden = true
+        userShown = false
     }
 
     public mutating func userShow() {
         userHidden = false
+        userShown = true
     }
 
-    /// `true` when the input source is Thai, the user hasn't hidden the
-    /// panel, and it isn't currently hidden to show what Caps Lock types.
+    /// `true` when the user chose Show, or when the input source is Thai,
+    /// the user hasn't hidden the panel, and it isn't currently hidden to
+    /// show what Caps Lock types.
     public func isVisible(hiddenForCaps: Bool) -> Bool {
-        isThai && !userHidden && !hiddenForCaps
+        userShown || (isThai && !userHidden && !hiddenForCaps)
     }
 }

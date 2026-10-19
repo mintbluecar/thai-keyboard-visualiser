@@ -47,8 +47,14 @@ when it's missing.
 
 A menu bar icon (ก) appears — no Dock icon. Its menu has:
 
-- **Show/Hide keyboard** — hide it while still typing in Thai; it comes
-  back when you switch input sources away from Thai and back.
+- **Show/Hide keyboard** — Show always brings the keyboard up, even
+  when the input source isn't Thai or Caps Lock is on. Hide puts it
+  away while you keep typing. Either lasts until you switch input
+  source; then it shows for Thai and hides otherwise again.
+
+The keyboard hides by itself while Caps Lock is on (it would show the
+wrong letters). If it seems to be missing, check Caps Lock, or turn on
+"Show what Caps Lock types" in Settings.
 - **Settings…** — font, opacity, size, hotkeys, start at login.
 - **Quit** — the only way to turn the app off entirely.
 

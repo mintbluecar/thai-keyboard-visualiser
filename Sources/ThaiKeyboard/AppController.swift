@@ -22,6 +22,9 @@ final class AppController {
 
     private var labels: LabelTable?
     private var visibility = Visibility(isThai: false)
+    /// The most recent Thai layout's labels, drawn when the user shows the
+    /// keyboard while a non-Thai source is active.
+    private var thaiLabels: LabelTable?
     private var pressed = PressedKeys()
     /// Runs only while `pressed.needsReconcile`; see `updateReconcileTimer`.
     private var reconcileTimer: Timer?
@@ -101,8 +104,12 @@ final class AppController {
         labels = SystemLayout.currentTranslator().map {
             LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
         }
-        panel.keyboardView.labels = labels
-        visibility.inputSourceChanged(isThai: SystemLayout.current().isThai)
+        let isThai = SystemLayout.current().isThai
+        if isThai { thaiLabels = labels }
+        // When Show keyboard is used outside Thai, still draw Thai labels:
+        // the last Thai layout seen, else the built-in Thai layout.
+        panel.keyboardView.labels = isThai ? labels : (thaiLabels ?? Self.builtInThaiLabels())
+        visibility.inputSourceChanged(isThai: isThai)
         pressed.reset()
         recompute()
         onCompatibilityChanged?()
@@ -139,6 +146,12 @@ final class AppController {
     private func userHide() {
         visibility.userHide()
         recompute()
+    }
+
+    private static func builtInThaiLabels() -> LabelTable? {
+        SystemLayout.translator(forSourceID: "com.apple.keylayout.Thai").map {
+            LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
+        }
     }
 
     private func currentMode() -> DisplayMode {
@@ -194,6 +207,8 @@ final class AppController {
             shouldShow = visibility.isVisible(hiddenForCaps: mode == .hiddenForCaps)
         }
         updateReconcileTimer()
+        // Shown by the user while Caps Lock would hide it: draw plain Thai.
+        if shouldShow, mode == .hiddenForCaps { mode = .thai(pressed.shift ? .shift : .plain) }
 
         let view = panel.keyboardView
         if view.mode != mode { view.mode = mode }
