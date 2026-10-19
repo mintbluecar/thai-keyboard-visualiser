@@ -4,7 +4,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_NAME="ThaiKeyboard"
-BUNDLE_ID="local.thaikeyboard.app"
 BUILD_DIR=".build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 SIGN_IDENTITY="Apple Development"
