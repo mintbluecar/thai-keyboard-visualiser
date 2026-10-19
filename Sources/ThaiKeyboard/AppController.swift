@@ -10,6 +10,7 @@ final class AppController {
         URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
     private static let permissionItemTitle =
         "Allow key presses: System Settings → Privacy & Security → Input Monitoring"
+    private static let firstLaunchKey = "ThaiKeyboard.didCompleteFirstLaunch"
 
     private let statusMenu: StatusMenu
     private let panel: KeyboardPanel
@@ -20,9 +21,16 @@ final class AppController {
     private var visibility = Visibility(isThai: false)
     private var pressed = PressedKeys()
 
+    private let prefs = Preferences()
+    /// Set while `restoreFrame()` is moving/resizing the panel
+    /// programmatically, so that doesn't get saved back as a user move.
+    private var isRestoringFrame = false
+    /// Set if `LoginItem.apply` throws on first launch. Settings (Task 9)
+    /// will surface this to the user; nothing about it is logged here.
+    private var firstLaunchLoginItemError: Error?
+
     /// Whether to show what Caps Lock types instead of hiding the panel.
-    /// The single place Preferences (Task 7) plugs in; off by default.
-    private var showCapsOutput: Bool { false }
+    private var showCapsOutput: Bool { prefs.showCapsOutput }
 
     init() {
         statusMenu = StatusMenu()
@@ -41,6 +49,12 @@ final class AppController {
             startPreview(preview)
             return
         }
+
+        panel.alphaValue = CGFloat(prefs.opacity)
+        panel.keyboardView.fontFamily = prefs.fontFamily
+        restoreFrame()
+        observeFrameChanges()
+        applyFirstLaunchLoginItemIfNeeded()
 
         statusMenu.onToggleShow = { [weak self] in self?.toggleShow() }
 
@@ -138,6 +152,69 @@ final class AppController {
         statusMenu.update(isShown: shouldShow, actionItems: actionItems)
     }
 
+    // MARK: Preferences
+
+    /// Observes the panel's own move/resize so a user drag or hotkey
+    /// resize (Task 8) is saved, and the screen configuration changing so
+    /// the panel is re-clamped into whichever screen it's now on.
+    private func observeFrameChanges() {
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveFrameIfNeeded() }
+        }
+        center.addObserver(forName: NSWindow.didResizeNotification, object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveFrameIfNeeded() }
+        }
+        center.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restoreFrame() }
+        }
+    }
+
+    private func saveFrameIfNeeded() {
+        guard !isRestoringFrame else { return }
+        prefs.frame = panel.frame
+    }
+
+    /// Restores the saved frame (clamped into its screen's visible area),
+    /// or falls back to `Placement.defaultFrame` when nothing was saved.
+    /// Used at launch and on `didChangeScreenParametersNotification`.
+    private func restoreFrame() {
+        let saved = prefs.frame
+        let visible = visibleFrame(containing: saved)
+        let newFrame = saved.map { Placement.clamped($0, in: visible) }
+            ?? Placement.defaultFrame(visible: visible, aspect: KeyboardPanel.aspect)
+
+        isRestoringFrame = true
+        panel.setFrame(newFrame, display: false)
+        isRestoringFrame = false
+    }
+
+    /// The visible frame of the screen containing `frame`'s centre, or the
+    /// main screen (or a sensible default) when there's no saved frame or
+    /// no screen contains it.
+    private func visibleFrame(containing frame: CGRect?) -> CGRect {
+        let fallback = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        guard let frame else { return fallback }
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.frame.contains(centre) }?.visibleFrame ?? fallback
+    }
+
+    /// On first launch only (a namespaced UserDefaults flag not yet set),
+    /// applies `prefs.startAtLogin` as the login item state. An error is
+    /// kept (not thrown further, not logged) for Settings (Task 9) to show.
+    private func applyFirstLaunchLoginItemIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.firstLaunchKey) else { return }
+        do {
+            try LoginItem.apply(prefs.startAtLogin)
+        } catch {
+            firstLaunchLoginItemError = error
+        }
+        defaults.set(true, forKey: Self.firstLaunchKey)
+    }
+
     // MARK: Preview
 
     /// `--preview-mode` / `--font` / `--snapshot`: show the Thai layout in
@@ -146,7 +223,7 @@ final class AppController {
         panel.keyboardView.labels = SystemLayout.translator(forSourceID: "com.apple.keylayout.Thai").map {
             LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
         }
-        preview.apply(to: panel.keyboardView)
+        preview.apply(to: panel.keyboardView, fontFamilyOverride: prefs.fontFamily)
         statusMenu.update(isShown: true, actionItems: [])
         statusMenu.onToggleShow = { [weak panel] in
             guard let panel else { return }
@@ -199,9 +276,12 @@ private struct PreviewOptions {
         isActive = ["--preview-mode", "--font", "--snapshot"].contains { arguments.contains($0) }
     }
 
-    @MainActor func apply(to view: KeyboardView) {
+    /// `fontFamily` (`--font`) wins when given; otherwise falls back to
+    /// `fontFamilyOverride` (the user's saved preference). Either way,
+    /// nothing here is persisted.
+    @MainActor func apply(to view: KeyboardView, fontFamilyOverride: String?) {
         view.mode = mode
         view.shiftHeld = shiftHeld
-        view.fontFamily = fontFamily
+        view.fontFamily = fontFamily ?? fontFamilyOverride
     }
 }
