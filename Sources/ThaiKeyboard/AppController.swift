@@ -50,7 +50,7 @@ final class AppController {
 
         inputSourceObserver = InputSourceObserver(onChange: { [weak self] in self?.inputSourceChanged() })
         let monitor = KeyEventMonitor(onEvent: { [weak self] in self?.handle($0) })
-        monitor.onStarted = { [weak self] in self?.recompute() }
+        monitor.onRunningChanged = { [weak self] in self?.keyMonitorRunningChanged() }
         self.monitor = monitor
         inputSourceChanged()
         monitor.start()
@@ -74,6 +74,13 @@ final class AppController {
         case .up(let code): pressed.keyUp(code)
         case .flags(let shift, let capsLock): pressed.flagsChanged(shift: shift, capsLock: capsLock)
         }
+        recompute()
+    }
+
+    /// The tap started or died. Either way, any key held before can't be
+    /// trusted (a dead tap never delivers its key-up), so clear them.
+    private func keyMonitorRunningChanged() {
+        pressed.reset()
         recompute()
     }
 

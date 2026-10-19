@@ -13,40 +13,55 @@ final class KeyEventMonitor {
         case flags(shift: Bool, capsLock: Bool)
     }
 
-    /// Called on the main actor once the tap is running.
-    var onStarted: (() -> Void)?
+    /// Called on the main actor when the tap starts, or stops because it
+    /// died (e.g. Input Monitoring was revoked). After a stop, no key-up
+    /// will arrive for keys held at the time.
+    var onRunningChanged: (() -> Void)?
 
-    private static let retryInterval: TimeInterval = 2
+    private static let checkInterval: TimeInterval = 2
     private static let requestedAccessKey = "local.thaikeyboard.app.didRequestListenEventAccess"
 
-    private let context: TapContext
-    private var retryTimer: Timer?
-    private var isRunning = false
+    private let onEvent: @MainActor (KeyEvent) -> Void
+    private var checkTimer: Timer?
+    private var running: RunningTap?
 
     init(onEvent: @escaping @MainActor (KeyEvent) -> Void) {
-        context = TapContext(onEvent: onEvent)
+        self.onEvent = onEvent
     }
 
-    /// `true` once the tap is running, or the system reports the Input
-    /// Monitoring permission as granted.
+    /// `true` while the tap is running, or when the system reports the
+    /// Input Monitoring permission as granted.
     var hasPermission: Bool {
-        isRunning || CGPreflightListenEventAccess()
+        running != nil || CGPreflightListenEventAccess()
     }
 
     /// Starts the tap, asking for Input Monitoring the first time the app
-    /// ever launches without it. If the tap can't be created yet (no
-    /// permission), retries every 2 s until it can, so a permission
-    /// granted while the app runs takes effect without a relaunch.
+    /// ever launches without it. Then every 2 s: if there's no tap, tries
+    /// to create one (so a permission granted while the app runs takes
+    /// effect without a relaunch); if there is one, checks it is still
+    /// alive and tears it down if not, so it gets recreated once access is
+    /// granted again.
     func start() {
-        guard !isRunning, retryTimer == nil else { return }
+        guard checkTimer == nil else { return }
         requestAccessOnce()
-        if tryCreateTap() { return }
-        retryTimer = Timer.scheduledTimer(withTimeInterval: Self.retryInterval, repeats: true) { [weak self] _ in
+        tick()
+        checkTimer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.tryCreateTap() else { return }
-                self.retryTimer?.invalidate()
-                self.retryTimer = nil
+                self?.tick()
             }
+        }
+    }
+
+    private func tick() {
+        if let running {
+            if !running.isHealthy {
+                running.stop()
+                self.running = nil
+                onRunningChanged?()
+            }
+        } else if let tap = RunningTap.start(onEvent: onEvent) {
+            running = tap
+            onRunningChanged?()
         }
     }
 
@@ -56,13 +71,33 @@ final class KeyEventMonitor {
         defaults.set(true, forKey: Self.requestedAccessKey)
         _ = CGRequestListenEventAccess()
     }
+}
+
+/// One live tap and the thread whose run loop services it.
+@MainActor
+private final class RunningTap {
+    private let context: TapContext
+    private let tap: CFMachPort
+    private let runLoop: UncheckedSendable<CFRunLoop>
+    /// Whether the system reported the permission as granted when the tap
+    /// started. Only a change from granted to not granted counts as a
+    /// revocation, so a stale `false` can't tear down a working tap.
+    private let hadPreflight: Bool
+
+    private init(context: TapContext, tap: CFMachPort, runLoop: CFRunLoop, hadPreflight: Bool) {
+        self.context = context
+        self.tap = tap
+        self.runLoop = UncheckedSendable(runLoop)
+        self.hadPreflight = hadPreflight
+    }
 
     /// Creates the tap and runs it on its own thread, so a busy main thread
-    /// never stalls the tap. Returns `false` if the system refused (no
-    /// permission yet). Without Input Monitoring the system may still hand
-    /// back a tap, but a disabled one that can't be enabled, so a tap only
-    /// counts once it is enabled.
-    private func tryCreateTap() -> Bool {
+    /// never stalls the tap. `nil` if the system refused (no permission
+    /// yet). Without Input Monitoring the system may still hand back a
+    /// tap, but a disabled one that can't be enabled, so a tap only counts
+    /// once it is enabled.
+    static func start(onEvent: @escaping @MainActor (KeyEventMonitor.KeyEvent) -> Void) -> RunningTap? {
+        let context = TapContext(onEvent: onEvent)
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.flagsChanged.rawValue)
@@ -73,26 +108,69 @@ final class KeyEventMonitor {
             eventsOfInterest: mask,
             callback: tapCallback,
             userInfo: Unmanaged.passUnretained(context).toOpaque()
-        ), let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            return false
+        ) else {
+            return nil
         }
         CGEvent.tapEnable(tap: tap, enable: true)
-        guard CGEvent.tapIsEnabled(tap: tap) else {
+        guard CGEvent.tapIsEnabled(tap: tap),
+              let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap)
-            return false
+            return nil
         }
         context.tap = tap
-        let runLoopSource = UncheckedSendable(source)
+
+        // The thread keeps `context` alive until its run loop exits, which
+        // only happens after the tap is invalidated on that same thread, so
+        // the callback never sees a freed context.
+        let runLoopBox = RunLoopHandoff()
+        let threadState = UncheckedSendable((context, source))
         let thread = Thread {
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource.value, .commonModes)
+            let (context, source) = threadState.value
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+            runLoopBox.publish(CFRunLoopGetCurrent())
             CFRunLoopRun()
+            withExtendedLifetime(context) {}
         }
         thread.name = "ThaiKeyboard.KeyEventTap"
         thread.qualityOfService = .userInteractive
         thread.start()
-        isRunning = true
-        onStarted?()
-        return true
+        let runLoop = runLoopBox.wait()
+        return RunningTap(context: context, tap: tap, runLoop: runLoop, hadPreflight: CGPreflightListenEventAccess())
+    }
+
+    /// `false` once the system has disabled the tap for good or the
+    /// permission has gone from granted to revoked.
+    var isHealthy: Bool {
+        CGEvent.tapIsEnabled(tap: tap) && !(hadPreflight && !CGPreflightListenEventAccess())
+    }
+
+    /// Invalidates the tap and ends its thread. Runs the teardown on the
+    /// tap's own run loop, so it can't race a callback in progress.
+    func stop() {
+        let state = UncheckedSendable((tap, runLoop.value))
+        CFRunLoopPerformBlock(runLoop.value, CFRunLoopMode.commonModes.rawValue) {
+            let (tap, runLoop) = state.value
+            CFMachPortInvalidate(tap)
+            CFRunLoopStop(runLoop)
+        }
+        CFRunLoopWakeUp(runLoop.value)
+    }
+}
+
+/// Passes the tap thread's run loop back to the thread that started it.
+private final class RunLoopHandoff: @unchecked Sendable {
+    private let ready = DispatchSemaphore(value: 0)
+    private var runLoop: CFRunLoop?
+
+    func publish(_ runLoop: CFRunLoop) {
+        self.runLoop = runLoop
+        ready.signal()
+    }
+
+    /// Blocks until `publish` has run; the thread does that immediately.
+    func wait() -> CFRunLoop {
+        ready.wait()
+        return runLoop!
     }
 }
 
