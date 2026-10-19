@@ -32,8 +32,12 @@ final class AppController {
     /// this to the user; nothing about it is logged here.
     private(set) var firstLaunchLoginItemError: Error?
 
-    /// Called whenever `compatibilityReport()` might have changed (the end
-    /// of every `recompute()`). `SettingsModel` subscribes while its
+    /// Called whenever `compatibilityReport()` might have changed: the
+    /// input source changed, the key monitor's tap started/stopped (so
+    /// Input Monitoring permission may have too), or hotkeys were
+    /// (re)registered. Deliberately *not* called from every `recompute()`
+    /// — that runs on every key event, and nothing in the report depends
+    /// on which keys are held. `SettingsModel` subscribes while its
     /// window exists, to keep its compatibility section live.
     var onCompatibilityChanged: (() -> Void)?
 
@@ -96,6 +100,7 @@ final class AppController {
         visibility.inputSourceChanged(isThai: SystemLayout.current().isThai)
         pressed.reset()
         recompute()
+        onCompatibilityChanged?()
     }
 
     private func handle(_ event: KeyEventMonitor.KeyEvent) {
@@ -112,6 +117,7 @@ final class AppController {
     private func keyMonitorRunningChanged() {
         pressed.reset()
         recompute()
+        onCompatibilityChanged?()
     }
 
     private func toggleShow() {
@@ -166,7 +172,6 @@ final class AppController {
                 : StatusMenu.ActionItem(title)
         }
         statusMenu.update(isShown: shouldShow, actionItems: actionItems)
-        onCompatibilityChanged?()
     }
 
     /// The current compatibility snapshot: input source, physical keyboard,
@@ -284,7 +289,7 @@ final class AppController {
             settingsModel = model
             settingsWindow = window
         }
-        settingsModel?.refreshCompatibility()
+        settingsModel?.refresh()
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
@@ -311,21 +316,14 @@ final class AppController {
     }
 
     /// Resizes the panel to `percent` (clamped to `0.25...1.0`) of its
-    /// current screen's visible width, about its current centre, the same
-    /// way a hotkey resize is clamped (Settings' size slider), then saves
-    /// the frame.
+    /// current screen's visible width, about its current centre, via the
+    /// same `Placement.resized` path a hotkey resize uses, then saves the
+    /// frame.
     func applySizePercent(_ percent: Double) {
         let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
             ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let centre = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
-
-        var width = visible.width * min(max(percent, 0.25), 1.0)
-        let maxWidth = max(Placement.minWidth, visible.width - 2 * Placement.margin)
-        width = min(max(width, Placement.minWidth), maxWidth)
-        let height = width / KeyboardPanel.aspect
-
-        let resized = CGRect(x: centre.x - width / 2, y: centre.y - height / 2, width: width, height: height)
-        let newFrame = Placement.clamped(resized, in: visible)
+        let width = visible.width * min(max(percent, 0.25), 1.0)
+        let newFrame = Placement.resized(panel.frame, toWidth: width, aspect: KeyboardPanel.aspect, in: visible)
         panel.setFrame(newFrame, display: true)
         prefs.frame = newFrame
     }
@@ -361,6 +359,7 @@ final class AppController {
         prefs.hotkeys = bindings
         failedHotkeys = hotkeyCenter?.register(bindings) ?? []
         recompute()
+        onCompatibilityChanged?()
         return failedHotkeys
     }
 

@@ -13,7 +13,7 @@ struct SettingsView: View {
             sections
         }
         .frame(width: 460, height: 560)
-        .onAppear { model.refreshCompatibility() }
+        .onAppear { model.refresh() }
     }
 
     /// Every section, top to bottom, without the scrolling container.

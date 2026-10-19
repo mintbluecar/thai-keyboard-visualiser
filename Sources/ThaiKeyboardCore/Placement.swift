@@ -69,28 +69,34 @@ public enum Placement {
 
     /// `frame` resized by `step` increments of ±10% width (dividing by
     /// 1.1 rather than multiplying by 0.9, so growing then shrinking by
-    /// the same step count round-trips), keeping its centre fixed and its
-    /// height derived from `aspect`. Width is clamped to
-    /// `[minWidth, visible.width - 2*margin]`, then the whole frame is
-    /// clamped into `visible`.
+    /// the same step count round-trips), then resized to that width via
+    /// `resized(_:toWidth:aspect:in:)`.
     public static func resized(_ frame: CGRect, step: Int, aspect: CGFloat, in visible: CGRect) -> CGRect {
-        let centre = CGPoint(x: frame.midX, y: frame.midY)
-
         var width = frame.width
         if step > 0 {
             for _ in 0..<step { width *= resizeFactor }
         } else if step < 0 {
             for _ in 0..<(-step) { width /= resizeFactor }
         }
+        return resized(frame, toWidth: width, aspect: aspect, in: visible)
+    }
+
+    /// `frame` resized to `width`, keeping its centre fixed and its height
+    /// derived from `aspect`. Width is clamped to `[minWidth, visible.width
+    /// - 2*margin]`, then the whole frame is clamped into `visible`. The
+    /// shared resize path behind both a hotkey step resize (above) and
+    /// Settings' size slider, which computes its own target width.
+    public static func resized(_ frame: CGRect, toWidth width: CGFloat, aspect: CGFloat, in visible: CGRect) -> CGRect {
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
 
         let maxWidth = max(minWidth, visible.width - 2 * margin)
-        width = min(max(width, minWidth), maxWidth)
-        let height = width / aspect
+        let clampedWidth = min(max(width, minWidth), maxWidth)
+        let height = clampedWidth / aspect
 
         let resized = CGRect(
-            x: centre.x - width / 2,
+            x: centre.x - clampedWidth / 2,
             y: centre.y - height / 2,
-            width: width,
+            width: clampedWidth,
             height: height
         )
         return clamped(resized, in: visible)

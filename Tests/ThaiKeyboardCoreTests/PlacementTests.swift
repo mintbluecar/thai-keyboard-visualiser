@@ -102,4 +102,32 @@ final class PlacementTests: XCTestCase {
         let f = Placement.clamped(inside, in: vis)
         XCTAssertEqual(f, inside)
     }
+
+    func test_resizedToWidthKeepsCentreAndAspect() {
+        let frame = CGRect(x: 300, y: 250, width: 500, height: 250)
+        let aspect: CGFloat = 2
+        let resized = Placement.resized(frame, toWidth: 700, aspect: aspect, in: vis)
+
+        XCTAssertEqual(resized.width, 700, accuracy: 0.001)
+        XCTAssertEqual(resized.height, resized.width / aspect, accuracy: 0.001)
+        XCTAssertEqual(resized.midX, frame.midX, accuracy: 0.001)
+        XCTAssertEqual(resized.midY, frame.midY, accuracy: 0.001)
+    }
+
+    func test_resizedToWidthClampsToMinAndScreen() {
+        let frame = CGRect(x: 400, y: 350, width: 500, height: 250)
+        let aspect: CGFloat = 2
+
+        let tooNarrow = Placement.resized(frame, toWidth: 10, aspect: aspect, in: vis)
+        XCTAssertEqual(tooNarrow.width, Placement.minWidth, accuracy: 0.5)
+
+        let tooWide = Placement.resized(frame, toWidth: 5000, aspect: aspect, in: vis)
+        XCTAssertEqual(tooWide.width, vis.width - 2 * Placement.margin, accuracy: 0.5)
+    }
+
+    func test_resizedToWidthStaysInsideVisible() {
+        let frame = CGRect(x: 950, y: 750, width: 100, height: 50)
+        let resized = Placement.resized(frame, toWidth: 900, aspect: 2, in: vis)
+        XCTAssertTrue(vis.contains(resized))
+    }
 }

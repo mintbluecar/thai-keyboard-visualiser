@@ -46,9 +46,23 @@ final class SettingsModel {
     /// Re-reads `compatibilityReport().lines`. Called when the Settings
     /// window opens and whenever `AppController` says something that
     /// affects the report might have changed (input source, hotkeys,
-    /// permissions).
+    /// permissions). Only assigns when the lines actually changed, so
+    /// `@Observable` doesn't notify `SettingsView` for no reason.
     func refreshCompatibility() {
-        compatibilityLines = controller.compatibilityReport().lines
+        let lines = controller.compatibilityReport().lines
+        guard lines != compatibilityLines else { return }
+        compatibilityLines = lines
+    }
+
+    /// Re-reads everything that can drift out from under Settings while
+    /// its window isn't the one changing it — the size slider (a hotkey
+    /// resize or a drag moves the panel without touching the model) and
+    /// which hotkeys are currently failing — plus the compatibility
+    /// section. Called every time the window is (re)shown.
+    func refresh() {
+        sizePercent = controller.currentSizePercent() * 100
+        failedHotkeys = controller.failedHotkeys
+        refreshCompatibility()
     }
 
     func setFontFamily(_ family: String?) {
