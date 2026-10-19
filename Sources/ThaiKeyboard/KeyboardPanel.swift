@@ -29,8 +29,6 @@ final class KeyboardPanel: NSPanel {
         isOpaque = false
         contentAspectRatio = NSSize(width: Self.aspect, height: 1)
 
-        acceptsMouseMovedEvents = true
-
         contentView = keyboardView
         keyboardView.closeButton = makeCloseButton()
     }
@@ -38,7 +36,7 @@ final class KeyboardPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A round × in the top strip above the keys. KeyboardView sizes and
+    /// A round × in the top padding above the keys. KeyboardView sizes and
     /// places it, so it scales with the window.
     private func makeCloseButton() -> NSButton {
         let button = NSButton(title: "", target: self, action: #selector(closeClicked))

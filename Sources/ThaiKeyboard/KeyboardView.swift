@@ -22,8 +22,6 @@ final class KeyboardView: NSView {
     static let padding: CGFloat = 28
     /// The × button's side: centred in the top padding, right-aligned with the keys.
     static let closeButtonSize: CGFloat = 20
-    /// How far in from the panel's edge the resize cursor shows.
-    private static let resizeEdge: CGFloat = 6
     private static let keyRadius: CGFloat = 8
     private static let panelRadius: CGFloat = 14
     private static let thaiSize: CGFloat = 28
@@ -60,64 +58,6 @@ final class KeyboardView: NSView {
                                    y: bounds.maxY - inset - side, width: side, height: side)
         closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Hide keyboard")?
             .withSymbolConfiguration(.init(pointSize: side * 0.9, weight: .regular))
-    }
-
-    // MARK: Resize cursor
-    //
-    // The panel never becomes key and the app is almost never active, and
-    // AppKit only runs cursor updates in the key window or active app
-    // (NSTrackingArea.h: NSTrackingActiveAlways is "Not supported for
-    // NSTrackingCursorUpdate"). So the window's own resize cursor never
-    // appears. Track mouse movement regardless of activation and set the
-    // resize cursor ourselves near the edges.
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero,
-                                       options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
-                                       owner: self, userInfo: nil))
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        updateCursor(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        updateCursor(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        NSCursor.arrow.set()
-    }
-
-    private func updateCursor(at point: CGPoint) {
-        if let position = resizePosition(at: point) {
-            NSCursor.frameResize(position: position, directions: .all).set()
-        } else {
-            NSCursor.arrow.set()
-        }
-    }
-
-    /// Which edge or corner `point` is on, or nil when it's inside. Corners
-    /// get a larger zone so they're easy to grab.
-    private func resizePosition(at point: CGPoint) -> NSCursor.FrameResizePosition? {
-        let edge = Self.resizeEdge
-        let corner = Self.panelRadius
-        let nearLeft = point.x <= bounds.minX + edge, nearRight = point.x >= bounds.maxX - edge
-        let nearBottom = point.y <= bounds.minY + edge, nearTop = point.y >= bounds.maxY - edge
-        let cornerLeft = point.x <= bounds.minX + corner, cornerRight = point.x >= bounds.maxX - corner
-        let cornerBottom = point.y <= bounds.minY + corner, cornerTop = point.y >= bounds.maxY - corner
-
-        if (nearTop && cornerLeft) || (nearLeft && cornerTop) { return .topLeft }
-        if (nearTop && cornerRight) || (nearRight && cornerTop) { return .topRight }
-        if (nearBottom && cornerLeft) || (nearLeft && cornerBottom) { return .bottomLeft }
-        if (nearBottom && cornerRight) || (nearRight && cornerBottom) { return .bottomRight }
-        if nearTop { return .top }
-        if nearBottom { return .bottom }
-        if nearLeft { return .left }
-        if nearRight { return .right }
-        return nil
     }
 
     // Colours (Global Constraints and the approved mockup).
