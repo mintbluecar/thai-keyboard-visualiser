@@ -36,14 +36,10 @@ final class KeyboardPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A plain light-grey × in the top-right padding. KeyboardView sizes and
-    /// places it, so it scales with the window.
+    /// A round × badge floating on the keyboard's top-right corner.
+    /// KeyboardView sizes and places it, so it scales with the window.
     private func makeCloseButton() -> NSButton {
-        let button = NSButton(title: "", target: self, action: #selector(closeClicked))
-        button.isBordered = false
-        button.imagePosition = .imageOnly
-        // The key labels' grey, so it reads as clearly as they do.
-        button.contentTintColor = NSColor(srgbRed: 0xcc / 255, green: 0xcc / 255, blue: 0xcc / 255, alpha: 1)
+        let button = CloseBadge(target: self, action: #selector(closeClicked))
         button.toolTip = "Hide keyboard until the input source changes"
         return button
     }

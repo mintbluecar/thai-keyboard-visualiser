@@ -282,7 +282,9 @@ final class AppController {
     private func restoreFrame() {
         let saved = prefs.frame
         let visible = visibleFrame(containing: saved)
-        let newFrame = saved.map { Placement.clamped($0, in: visible) }
+        // Re-derive the height from the width with today's aspect, so a frame
+        // saved before a layout change (e.g. the × overhang) isn't clipped.
+        let newFrame = saved.map { Placement.resized($0, toWidth: $0.width, aspect: KeyboardPanel.aspect, in: visible) }
             ?? Placement.defaultFrame(visible: visible, aspect: KeyboardPanel.aspect)
 
         isRestoringFrame = true
