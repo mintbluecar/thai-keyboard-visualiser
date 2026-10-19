@@ -19,6 +19,12 @@ final class KeyboardView: NSView {
     static let keySize: CGFloat = 58
     static let keyGap: CGFloat = 6
     static let padding: CGFloat = 12
+    /// Taller padding along the top: room for the × button above the keys.
+    static let topPadding: CGFloat = 30
+    /// The × button's side, centred vertically in the top strip.
+    static let closeButtonSize: CGFloat = 20
+    /// How far in from the panel's edge the resize cursor shows.
+    private static let resizeEdge: CGFloat = 6
     private static let keyRadius: CGFloat = 8
     private static let panelRadius: CGFloat = 14
     private static let thaiSize: CGFloat = 28
@@ -32,8 +38,87 @@ final class KeyboardView: NSView {
         let units = MacBookANSI.unitSize
         return CGSize(
             width: units.width * keySize + (units.width - 1) * keyGap + 2 * padding,
-            height: units.height * keySize + (units.height - 1) * keyGap + 2 * padding
+            height: units.height * keySize + (units.height - 1) * keyGap + topPadding + padding
         )
+    }
+
+    /// The × button; the view sizes and places it so it scales with the window.
+    var closeButton: NSButton? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let closeButton { addSubview(closeButton) }
+            needsLayout = true
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        guard let closeButton else { return }
+        let scale = bounds.width / Self.designSize.width
+        let side = Self.closeButtonSize * scale
+        let inset = (Self.topPadding - Self.closeButtonSize) / 2 * scale
+        closeButton.frame = CGRect(x: bounds.maxX - Self.padding * scale - side,
+                                   y: bounds.maxY - inset - side, width: side, height: side)
+        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Hide keyboard")?
+            .withSymbolConfiguration(.init(pointSize: side * 0.9, weight: .regular))
+    }
+
+    // MARK: Resize cursor
+    //
+    // The panel never becomes key and the app is almost never active, and
+    // AppKit only runs cursor updates in the key window or active app
+    // (NSTrackingArea.h: NSTrackingActiveAlways is "Not supported for
+    // NSTrackingCursorUpdate"). So the window's own resize cursor never
+    // appears. Track mouse movement regardless of activation and set the
+    // resize cursor ourselves near the edges.
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero,
+                                       options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
+    private func updateCursor(at point: CGPoint) {
+        if let position = resizePosition(at: point) {
+            NSCursor.frameResize(position: position, directions: .all).set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
+    /// Which edge or corner `point` is on, or nil when it's inside. Corners
+    /// get a larger zone so they're easy to grab.
+    private func resizePosition(at point: CGPoint) -> NSCursor.FrameResizePosition? {
+        let edge = Self.resizeEdge
+        let corner = Self.panelRadius
+        let nearLeft = point.x <= bounds.minX + edge, nearRight = point.x >= bounds.maxX - edge
+        let nearBottom = point.y <= bounds.minY + edge, nearTop = point.y >= bounds.maxY - edge
+        let cornerLeft = point.x <= bounds.minX + corner, cornerRight = point.x >= bounds.maxX - corner
+        let cornerBottom = point.y <= bounds.minY + corner, cornerTop = point.y >= bounds.maxY - corner
+
+        if (nearTop && cornerLeft) || (nearLeft && cornerTop) { return .topLeft }
+        if (nearTop && cornerRight) || (nearRight && cornerTop) { return .topRight }
+        if (nearBottom && cornerLeft) || (nearLeft && cornerBottom) { return .bottomLeft }
+        if (nearBottom && cornerRight) || (nearRight && cornerBottom) { return .bottomRight }
+        if nearTop { return .top }
+        if nearBottom { return .bottom }
+        if nearLeft { return .left }
+        if nearRight { return .right }
+        return nil
     }
 
     // Colours (Global Constraints and the approved mockup).
@@ -138,7 +223,7 @@ final class KeyboardView: NSView {
         let pitch = keySize + keyGap
         let width = unitRect.width * pitch - keyGap
         let height = unitRect.height * pitch - keyGap
-        let top = padding + unitRect.minY * pitch
+        let top = topPadding + unitRect.minY * pitch
         return CGRect(x: padding + unitRect.minX * pitch, y: designHeight - top - height, width: width, height: height)
     }
 

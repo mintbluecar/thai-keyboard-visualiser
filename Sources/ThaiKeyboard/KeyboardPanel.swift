@@ -29,23 +29,24 @@ final class KeyboardPanel: NSPanel {
         isOpaque = false
         contentAspectRatio = NSSize(width: Self.aspect, height: 1)
 
+        acceptsMouseMovedEvents = true
+
         contentView = keyboardView
-        keyboardView.addSubview(makeCloseButton(in: keyboardView.bounds))
+        keyboardView.closeButton = makeCloseButton()
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A small × sitting in the top-right strip of panel padding, just left
-    /// of the rounded corner.
-    private func makeCloseButton(in bounds: CGRect) -> NSButton {
-        let side = KeyboardView.padding
-        let button = NSButton(title: "×", target: self, action: #selector(closeClicked))
+    /// A round × in the top strip above the keys. KeyboardView sizes and
+    /// places it, so it scales with the window.
+    private func makeCloseButton() -> NSButton {
+        let button = NSButton(title: "", target: self, action: #selector(closeClicked))
         button.isBordered = false
-        button.font = .systemFont(ofSize: side - 1)
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyUpOrDown
         button.contentTintColor = .secondaryLabelColor
-        button.frame = CGRect(x: bounds.maxX - 2 * side, y: bounds.maxY - side, width: side, height: side)
-        button.autoresizingMask = [.minXMargin, .minYMargin]
+        button.toolTip = "Hide keyboard until the input source changes"
         return button
     }
 
