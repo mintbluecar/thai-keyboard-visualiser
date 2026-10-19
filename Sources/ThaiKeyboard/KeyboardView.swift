@@ -8,8 +8,6 @@ import ThaiKeyboardCore
 /// All drawing happens in "design points" (the proportions from the Global
 /// Constraints at a 58 pt key) under a uniform scale of
 /// `bounds.width / designSize.width`, so everything scales with the window.
-/// The keyboard fills the window except a transparent overhang on the top
-/// and right, where the × badge floats over the corner.
 final class KeyboardView: NSView {
     var labels: LabelTable? { didSet { needsDisplay = true } }
     var mode: DisplayMode = .thai(.plain) { didSet { needsDisplay = true } }
@@ -28,11 +26,15 @@ final class KeyboardView: NSView {
     private static let cornerSize: CGFloat = 14
     private static let cornerInset = CGPoint(x: 6, y: 4)
     private static let modifierSize: CGFloat = 12
-    /// Resize grip: diagonal lines in the bottom-right padding. macOS won't
-    /// let a background app change the cursor, so the grip is the hint
-    /// that the window can be resized.
-    private static let gripCorner = CGPoint(x: 4, y: 4)
-    private static let gripLengths: [CGFloat] = [3, 6]
+
+    /// The × floats diagonally off the keyboard's top-right corner, in a
+    /// transparent margin above and right of the keyboard. Clicks on the
+    /// transparent margin pass through to whatever is underneath.
+    private static let overhang: CGFloat = 18
+    private static let closeSize: CGFloat = 16
+    /// How long the × stays after the pointer leaves the keyboard, so there's
+    /// time to reach it across the transparent margin.
+    private static let closeHideDelay: TimeInterval = 0.6
 
     /// The keyboard itself at scale 1: keys plus gaps plus padding.
     static var keyboardSize: CGSize {
@@ -43,26 +45,20 @@ final class KeyboardView: NSView {
         )
     }
 
-    /// The × badge's diameter, and where its centre sits: just inside the
-    /// keyboard's top-right corner, so half of it floats outside.
-    static let closeBadgeSize: CGFloat = 20
-    private static let closeBadgeInset: CGFloat = 4
-    /// Transparent margin on the top and right for the badge to float in.
-    /// Clicks on it pass through to whatever is underneath.
-    private static let overhang: CGFloat = closeBadgeSize / 2 - closeBadgeInset + 2
-
     /// The whole window at scale 1: the keyboard plus the overhang.
     static var designSize: CGSize {
-        let board = keyboardSize
-        return CGSize(width: board.width + overhang, height: board.height + overhang)
+        CGSize(width: keyboardSize.width + overhang, height: keyboardSize.height + overhang)
     }
 
-    /// The × badge. The view sizes and places it on the keyboard's
-    /// top-right corner, so it scales with the window.
+    /// The × button. The view sizes and places it, so it scales with the
+    /// window, and shows it only while the pointer is over the keyboard.
     var closeButton: NSButton? {
         didSet {
             oldValue?.removeFromSuperview()
-            if let closeButton { addSubview(closeButton) }
+            if let closeButton {
+                closeButton.alphaValue = 0
+                addSubview(closeButton)
+            }
             needsLayout = true
         }
     }
@@ -71,11 +67,52 @@ final class KeyboardView: NSView {
         super.layout()
         guard let closeButton else { return }
         let scale = bounds.width / Self.designSize.width
+        let side = Self.closeSize * scale
         let board = Self.keyboardSize
-        let side = Self.closeBadgeSize * scale
-        let centre = CGPoint(x: (board.width - Self.closeBadgeInset) * scale,
-                             y: (board.height - Self.closeBadgeInset) * scale)
+        let centre = CGPoint(x: (board.width + Self.overhang / 2) * scale,
+                             y: (board.height + Self.overhang / 2) * scale)
         closeButton.frame = CGRect(x: centre.x - side / 2, y: centre.y - side / 2, width: side, height: side)
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Hide keyboard")?
+            .withSymbolConfiguration(.init(pointSize: side * 0.65, weight: .semibold))
+        // A shadow so the light × reads over dark and light backgrounds.
+        closeButton.wantsLayer = true
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.8)
+        shadow.shadowBlurRadius = 3
+        shadow.shadowOffset = .zero
+        closeButton.shadow = shadow
+    }
+
+    // MARK: Show the × on hover
+    //
+    // .activeAlways: the app is almost never active, and tracking areas are
+    // otherwise only live in the key window or active app (NSTrackingArea.h).
+
+    private var hideCloseWork: DispatchWorkItem?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { setCloseVisible(true) }
+    override func mouseExited(with event: NSEvent) { setCloseVisible(false) }
+
+    /// Shows the × at once; hides it after a short delay, cancelled if the
+    /// pointer comes back (to the keyboard or to the × itself).
+    private func setCloseVisible(_ visible: Bool) {
+        hideCloseWork?.cancel()
+        hideCloseWork = nil
+        guard let closeButton else { return }
+        if visible {
+            closeButton.animator().alphaValue = 1
+        } else {
+            let work = DispatchWorkItem { closeButton.animator().alphaValue = 0 }
+            hideCloseWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.closeHideDelay, execute: work)
+        }
     }
 
     // Colours (Global Constraints and the approved mockup).
@@ -95,8 +132,7 @@ final class KeyboardView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let scale = bounds.width / Self.designSize.width
-        // The keyboard sits bottom left; the overhang above and right of it
-        // stays transparent.
+        // The keyboard sits bottom left; any overhang stays transparent.
         let design = Self.keyboardSize
 
         context.saveGState()
@@ -119,22 +155,7 @@ final class KeyboardView: NSView {
             drawKey(key, design: design, resolver: resolver, cornerFont: cornerFont,
                     modifierFont: modifierFont, context: context)
         }
-        drawResizeGrip(design: design, context: context)
         context.restoreGState()
-    }
-
-    /// Two short diagonal lines in the bottom-right corner, inside the
-    /// rounded edge and clear of the keys.
-    private func drawResizeGrip(design: CGSize, context: CGContext) {
-        let corner = CGPoint(x: design.width - Self.gripCorner.x, y: Self.gripCorner.y)
-        context.setStrokeColor(Colour.modifier)
-        context.setLineWidth(1.5)
-        context.setLineCap(.round)
-        for length in Self.gripLengths {
-            context.move(to: CGPoint(x: corner.x - length, y: corner.y))
-            context.addLine(to: CGPoint(x: corner.x, y: corner.y + length))
-        }
-        context.strokePath()
     }
 
     private func drawKey(_ key: KeySpec, design: CGSize, resolver: FontResolver, cornerFont: CTFont,
