@@ -8,18 +8,20 @@ import ThaiKeyboardCore
 final class AppController {
     private static let inputMonitoringURL =
         URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
-    private static let permissionItemTitle =
-        "Allow key presses: System Settings → Privacy & Security → Input Monitoring"
     private static let firstLaunchKey = "ThaiKeyboard.didCompleteFirstLaunch"
 
     private let statusMenu: StatusMenu
     private let panel: KeyboardPanel
     private var monitor: KeyEventMonitor?
     private var inputSourceObserver: InputSourceObserver?
+    private var hotkeyCenter: HotkeyCenter?
 
     private var labels: LabelTable?
     private var visibility = Visibility(isThai: false)
     private var pressed = PressedKeys()
+    /// The hotkeys `HotkeyCenter.register` couldn't register, surfaced in
+    /// the compatibility report.
+    private var failedHotkeys: Set<HotkeyAction> = []
 
     private let prefs = Preferences()
     /// Set while `restoreFrame()` is moving/resizing the panel
@@ -66,6 +68,11 @@ final class AppController {
         let monitor = KeyEventMonitor(onEvent: { [weak self] in self?.handle($0) })
         monitor.onRunningChanged = { [weak self] in self?.keyMonitorRunningChanged() }
         self.monitor = monitor
+
+        let hotkeyCenter = HotkeyCenter(onAction: { [weak self] in self?.performHotkeyAction($0) })
+        self.hotkeyCenter = hotkeyCenter
+        failedHotkeys = hotkeyCenter.register(prefs.hotkeys)
+
         inputSourceChanged()
         monitor.start()
     }
@@ -143,13 +150,49 @@ final class AppController {
             panel.orderOut(nil)
         }
 
-        var actionItems: [StatusMenu.ActionItem] = []
-        if let monitor, !monitor.hasPermission {
-            actionItems.append(StatusMenu.ActionItem(Self.permissionItemTitle) {
-                NSWorkspace.shared.open(Self.inputMonitoringURL)
-            })
+        let report = compatibilityReport()
+        let actionItems = report.actionItems.map { title in
+            title == CompatibilityReport.keyPressesNotAllowedLine
+                ? StatusMenu.ActionItem(title) { NSWorkspace.shared.open(Self.inputMonitoringURL) }
+                : StatusMenu.ActionItem(title)
         }
         statusMenu.update(isShown: shouldShow, actionItems: actionItems)
+    }
+
+    /// The current compatibility snapshot: input source, physical keyboard,
+    /// Input Monitoring permission, Caps Lock behaviour, and any hotkeys
+    /// that failed to register.
+    private func compatibilityReport() -> CompatibilityReport {
+        CompatibilityReport(
+            inputSource: SystemLayout.current(),
+            keyboardType: SystemLayout.keyboardType(),
+            inputMonitoring: monitor?.hasPermission ?? false,
+            capsChangesOutput: labels?.capsChangesOutput ?? false,
+            failedHotkeys: failedHotkeys
+        )
+    }
+
+    /// Runs a global hotkey's action: snaps or resizes the panel on the
+    /// screen it's currently on (even while hidden), then saves the new
+    /// frame as the user's preference.
+    private func performHotkeyAction(_ action: HotkeyAction) {
+        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let newFrame: CGRect
+        switch action {
+        case .snapTop: newFrame = Placement.snapped(panel.frame, to: .top, in: visible)
+        case .snapBottom: newFrame = Placement.snapped(panel.frame, to: .bottom, in: visible)
+        case .snapLeft: newFrame = Placement.snapped(panel.frame, to: .left, in: visible)
+        case .snapRight: newFrame = Placement.snapped(panel.frame, to: .right, in: visible)
+        case .snapTopLeft: newFrame = Placement.snapped(panel.frame, to: .topLeft, in: visible)
+        case .snapTopRight: newFrame = Placement.snapped(panel.frame, to: .topRight, in: visible)
+        case .snapBottomLeft: newFrame = Placement.snapped(panel.frame, to: .bottomLeft, in: visible)
+        case .snapBottomRight: newFrame = Placement.snapped(panel.frame, to: .bottomRight, in: visible)
+        case .bigger: newFrame = Placement.resized(panel.frame, step: 1, aspect: KeyboardPanel.aspect, in: visible)
+        case .smaller: newFrame = Placement.resized(panel.frame, step: -1, aspect: KeyboardPanel.aspect, in: visible)
+        }
+        panel.setFrame(newFrame, display: true)
+        prefs.frame = newFrame
     }
 
     // MARK: Preferences

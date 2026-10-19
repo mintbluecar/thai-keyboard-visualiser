@@ -39,3 +39,22 @@ public enum Hotkeys {
         .smaller: HotkeyBinding(keyCode: UInt32(kVK_ANSI_Minus), carbonModifiers: modifiers),
     ]
 }
+
+extension HotkeyAction {
+    /// The name shown for this action in Settings and in the compatibility
+    /// report's "Hotkeys in use by another app" line.
+    public var title: String {
+        switch self {
+        case .snapTop: return "Snap to top"
+        case .snapBottom: return "Snap to bottom"
+        case .snapLeft: return "Snap to left"
+        case .snapRight: return "Snap to right"
+        case .snapTopLeft: return "Snap to top-left"
+        case .snapTopRight: return "Snap to top-right"
+        case .snapBottomLeft: return "Snap to bottom-left"
+        case .snapBottomRight: return "Snap to bottom-right"
+        case .bigger: return "Bigger"
+        case .smaller: return "Smaller"
+        }
+    }
+}
