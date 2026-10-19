@@ -10,6 +10,9 @@ final class AppController {
     private static let inputMonitoringURL =
         URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
     private static let firstLaunchKey = "ThaiKeyboard.didCompleteFirstLaunch"
+    /// How often held keys, Shift and Caps Lock are checked against the
+    /// system's own key state while any of them is on.
+    private static let reconcileInterval: TimeInterval = 0.25
 
     private let statusMenu: StatusMenu
     private let panel: KeyboardPanel
@@ -20,6 +23,8 @@ final class AppController {
     private var labels: LabelTable?
     private var visibility = Visibility(isThai: false)
     private var pressed = PressedKeys()
+    /// Runs only while `pressed.needsReconcile`; see `updateReconcileTimer`.
+    private var reconcileTimer: Timer?
     /// The hotkeys `HotkeyCenter.register` couldn't register, surfaced in
     /// the compatibility report. Settings reads this to mark those rows.
     private(set) var failedHotkeys: Set<HotkeyAction> = []
@@ -75,7 +80,7 @@ final class AppController {
 
         // Caps Lock is latched, so read where it stands now rather than
         // wait for the first flags event.
-        pressed.flagsChanged(shift: false, capsLock: CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift))
+        syncFlagsFromSystem()
 
         inputSourceObserver = InputSourceObserver(onChange: { [weak self] in self?.inputSourceChanged() })
         let monitor = KeyEventMonitor(onEvent: { [weak self] in self?.handle($0) })
@@ -113,9 +118,11 @@ final class AppController {
     }
 
     /// The tap started or died. Either way, any key held before can't be
-    /// trusted (a dead tap never delivers its key-up), so clear them.
+    /// trusted (a dead tap never delivers its key-up), so clear them, and
+    /// take Shift and Caps Lock from the system as they stand now.
     private func keyMonitorRunningChanged() {
         pressed.reset()
+        syncFlagsFromSystem()
         recompute()
         onCompatibilityChanged?()
     }
@@ -143,16 +150,50 @@ final class AppController {
         )
     }
 
+    /// Sets Shift and Caps Lock from the system's current modifier state.
+    private func syncFlagsFromSystem() {
+        let flags = CGEventSource.flagsState(.combinedSessionState)
+        pressed.flagsChanged(shift: flags.contains(.maskShift), capsLock: flags.contains(.maskAlphaShift))
+    }
+
+    /// Event taps get no keyboard events while Secure Event Input is on
+    /// (Apple TN2150), so a key-up or flags change in a password field
+    /// can be missed, leaving a key lit or the panel hidden for Caps Lock.
+    /// While anything is held or latched, `reconcileTimer` checks the
+    /// system's key state: keys it no longer reports down are dropped and
+    /// Shift/Caps Lock are re-read.
+    private func reconcileWithSystem() {
+        let before = pressed
+        pressed.reconcile { CGEventSource.keyState(.combinedSessionState, key: $0) }
+        syncFlagsFromSystem()
+        if pressed != before { recompute() }
+    }
+
+    private func updateReconcileTimer() {
+        if pressed.needsReconcile, reconcileTimer == nil {
+            reconcileTimer = Timer.scheduledTimer(withTimeInterval: Self.reconcileInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reconcileWithSystem() }
+            }
+        } else if !pressed.needsReconcile, let timer = reconcileTimer {
+            timer.invalidate()
+            reconcileTimer = nil
+        }
+    }
+
     /// Brings the panel, its drawing and the menu in line with the current
-    /// state. Any keys held from before are cleared whenever the panel
-    /// (re)appears, so nothing stays lit from a press it never saw end.
+    /// state. Whenever the panel (re)appears, held keys are cleared and
+    /// Shift/Caps Lock re-read from the system, so nothing stays lit from a
+    /// press it never saw end.
     private func recompute() {
         var mode = currentMode()
-        let shouldShow = visibility.isVisible(hiddenForCaps: mode == .hiddenForCaps)
+        var shouldShow = visibility.isVisible(hiddenForCaps: mode == .hiddenForCaps)
         if shouldShow, !panel.isVisible {
             pressed.reset()
+            syncFlagsFromSystem()
             mode = currentMode()
+            shouldShow = visibility.isVisible(hiddenForCaps: mode == .hiddenForCaps)
         }
+        updateReconcileTimer()
 
         let view = panel.keyboardView
         if view.mode != mode { view.mode = mode }

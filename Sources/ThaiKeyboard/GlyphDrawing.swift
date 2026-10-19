@@ -10,12 +10,16 @@ enum GlyphDrawing {
     /// A lone Thai combining mark is drawn as bare mark glyphs with
     /// `CTFontDrawGlyphs`, with their combined ink bounding box centred, so
     /// no dotted circle, box or base letter is ever drawn (see `markGlyphs`).
+    /// If `font` yields no such glyphs, the system Thai font is tried; if
+    /// that fails too, nothing is drawn rather than risk a dotted circle.
     /// Anything else is a `CTLine` centred on its typographic bounds.
     static func drawCentred(_ text: String, font: CTFont, in rect: CGRect, context: CGContext) {
         guard !text.isEmpty else { return }
         context.textMatrix = .identity
 
-        if ThaiMarks.isCombiningMark(text), let mark = markGlyphs(text, font: font) {
+        if ThaiMarks.isCombiningMark(text) {
+            guard let mark = markGlyphs(text, font: font)
+                ?? markGlyphs(text, font: FontResolver.systemThaiFont(size: CTFontGetSize(font))) else { return }
             var glyphs = mark.glyphs
             var ink = CGRect.null
             for (i, glyph) in glyphs.enumerated() {

@@ -51,10 +51,15 @@ public enum SystemLayout {
         }
     }
 
-    /// `true` when any of `languages` is a Thai language tag, i.e. starts
-    /// with "th".
+    /// `true` when the source's primary language, the first entry of its
+    /// `kTISPropertyInputSourceLanguages`, is Thai ("th" or "th-…").
+    /// TextInputSources.h: "The first language code in the array is the
+    /// language for which the input source is intended". Later entries are
+    /// only languages it *can* type, e.g. Unicode Hex Input lists "th"
+    /// among hundreds after an empty first entry, so they don't count.
     public static func isThai(languages: [String]) -> Bool {
-        languages.contains { $0.hasPrefix("th") }
+        guard let primary = languages.first else { return false }
+        return primary == "th" || primary.hasPrefix("th-")
     }
 
     private static func installedSource(withID sourceID: String) -> TISInputSource? {
@@ -117,7 +122,7 @@ private struct CarbonKeyTranslator: KeyTranslator {
                 UInt16(kUCKeyActionDisplay),
                 state.carbonModifiers,
                 keyboardType,
-                UInt32(kUCKeyTranslateNoDeadKeysBit),
+                UInt32(kUCKeyTranslateNoDeadKeysMask),
                 &deadKeyState,
                 chars.count,
                 &length,

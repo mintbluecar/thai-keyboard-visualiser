@@ -32,4 +32,32 @@ final class PressedKeysTests: XCTestCase {
         p.reset()
         XCTAssertTrue(p.capsLock)
     }
+
+    func test_reconcileDropsKeysTheSystemNoLongerReportsDown() {
+        var p = PressedKeys()
+        p.keyDown(12)
+        p.keyDown(48)
+        p.reconcile(isDown: { $0 == 12 })
+        XCTAssertEqual(p.keys, [12])
+    }
+
+    func test_reconcileNeverAddsKeys() {
+        var p = PressedKeys()
+        p.reconcile(isDown: { _ in true })
+        XCTAssertEqual(p.keys, [])
+    }
+
+    func test_needsReconcileWhileAnythingIsHeldOrLatched() {
+        var p = PressedKeys()
+        XCTAssertFalse(p.needsReconcile)
+        p.keyDown(48)
+        XCTAssertTrue(p.needsReconcile)
+        p.keyUp(48)
+        p.flagsChanged(shift: true, capsLock: false)
+        XCTAssertTrue(p.needsReconcile)
+        p.flagsChanged(shift: false, capsLock: true)
+        XCTAssertTrue(p.needsReconcile)
+        p.flagsChanged(shift: false, capsLock: false)
+        XCTAssertFalse(p.needsReconcile)
+    }
 }
