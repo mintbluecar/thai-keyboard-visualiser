@@ -18,10 +18,9 @@ final class KeyboardView: NSView {
     // Proportions at scale 1 (Global Constraints).
     static let keySize: CGFloat = 58
     static let keyGap: CGFloat = 6
-    static let padding: CGFloat = 12
-    /// Taller padding along the top: room for the × button above the keys.
-    static let topPadding: CGFloat = 30
-    /// The × button's side, centred vertically in the top strip.
+    /// Wide enough on every side for the × to sit in the top-right corner.
+    static let padding: CGFloat = 28
+    /// The × button's side: centred in the top padding, right-aligned with the keys.
     static let closeButtonSize: CGFloat = 20
     /// How far in from the panel's edge the resize cursor shows.
     private static let resizeEdge: CGFloat = 6
@@ -38,7 +37,7 @@ final class KeyboardView: NSView {
         let units = MacBookANSI.unitSize
         return CGSize(
             width: units.width * keySize + (units.width - 1) * keyGap + 2 * padding,
-            height: units.height * keySize + (units.height - 1) * keyGap + topPadding + padding
+            height: units.height * keySize + (units.height - 1) * keyGap + 2 * padding
         )
     }
 
@@ -56,7 +55,7 @@ final class KeyboardView: NSView {
         guard let closeButton else { return }
         let scale = bounds.width / Self.designSize.width
         let side = Self.closeButtonSize * scale
-        let inset = (Self.topPadding - Self.closeButtonSize) / 2 * scale
+        let inset = (Self.padding - Self.closeButtonSize) / 2 * scale
         closeButton.frame = CGRect(x: bounds.maxX - Self.padding * scale - side,
                                    y: bounds.maxY - inset - side, width: side, height: side)
         closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Hide keyboard")?
@@ -223,7 +222,7 @@ final class KeyboardView: NSView {
         let pitch = keySize + keyGap
         let width = unitRect.width * pitch - keyGap
         let height = unitRect.height * pitch - keyGap
-        let top = topPadding + unitRect.minY * pitch
+        let top = padding + unitRect.minY * pitch
         return CGRect(x: padding + unitRect.minX * pitch, y: designHeight - top - height, width: width, height: height)
     }
 
