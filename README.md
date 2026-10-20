@@ -1,4 +1,4 @@
-# ThaiKeyboard
+# Thai Keyboard Visualiser
 
 A small macOS menu-bar app that shows a floating on-screen keyboard whenever
 the Thai input source is active, so you can see where the Thai letters are
@@ -6,8 +6,9 @@ while you type. It lights up each key as you press it. It's a learning aid
 that you build and run on your own Mac. There's no ready-made download:
 sharing a pre-built app would need a paid Apple Developer ID and
 notarisation, so instead each person builds it with Xcode, which is free.
+On your Mac the app is called **ThaiKeyboard**.
 
-![The ThaiKeyboard overlay: a MacBook keyboard with Thai characters on each key and the US letter in blue in the corner](docs/images/keyboard.png)
+![The keyboard overlay: a MacBook keyboard with Thai characters on each key and the US letter in blue in the corner](docs/images/keyboard.png)
 
 ## Install it on your Mac
 
@@ -70,16 +71,16 @@ In Terminal:
 
 ```
 cd ~/Downloads
-git clone <REPOSITORY-URL> thai-keyboard
-cd thai-keyboard
+git clone https://github.com/rcar-t/thai-keyboard-visualiser.git
+cd thai-keyboard-visualiser
 ```
 
-(Or download the project as a ZIP from its page, unzip it, and `cd` into
-the unzipped folder.)
+(Or on the [project page](https://github.com/rcar-t/thai-keyboard-visualiser)
+click **Code → Download ZIP**, unzip it, and `cd` into the unzipped folder.)
 
 ### 5. Build and install
 
-Still in the `thai-keyboard` folder:
+Still in the `thai-keyboard-visualiser` folder:
 
 ```
 scripts/build-app.sh
@@ -100,7 +101,7 @@ Now switch your input source to Thai: the keyboard appears.
 ### Updating
 
 ```
-cd ~/Downloads/thai-keyboard
+cd ~/Downloads/thai-keyboard-visualiser
 git pull
 scripts/build-app.sh
 ```
