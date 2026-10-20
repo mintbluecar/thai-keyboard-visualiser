@@ -52,7 +52,6 @@ A menu bar icon (ก) appears — no Dock icon. Its menu has:
   switches the input source to Thai (the Thai source you used last).
   Hide puts it away while you keep typing, until you next switch
   input source.
-
 - **Settings…** — font, opacity, size, hotkeys, start at login.
 - **Quit** — the only way to turn the app off entirely.
 
