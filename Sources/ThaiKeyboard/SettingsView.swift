@@ -114,32 +114,28 @@ struct SettingsView: View {
 
 /// The font sample "ก ข ค ั ี ่ ้", drawn through `GlyphDrawing` (as the
 /// keyboard itself is) so its marks are clean here too — no dotted circle.
-private struct FontSampleView: NSViewRepresentable {
+private struct FontSampleView: View {
     var family: String?
-
-    func makeNSView(context: Context) -> SampleCanvas { SampleCanvas() }
-
-    func updateNSView(_ view: SampleCanvas, context: Context) {
-        view.family = family
-    }
-}
-
-final class SampleCanvas: NSView {
-    var family: String? { didSet { needsDisplay = true } }
+    @Environment(\.colorScheme) private var colorScheme
 
     private static let items = ["ก", "ข", "ค", "ั", "ี", "่", "้"]
     private static let size: CGFloat = 28
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        context.setFillColor(NSColor.labelColor.cgColor)
-
-        let resolver = FontResolver(preferredFamily: family)
-        let itemWidth = bounds.width / CGFloat(Self.items.count)
-        for (index, item) in Self.items.enumerated() {
-            let rect = CGRect(x: CGFloat(index) * itemWidth, y: 0, width: itemWidth, height: bounds.height)
-            let font = resolver.font(for: item, size: Self.size)
-            GlyphDrawing.drawCentred(item, font: font, in: rect, context: context)
+    // A SwiftUI Canvas (not an NSView) so ImageRenderer can draw it too.
+    // GlyphDrawing works in y-up coordinates; Canvas's are y-down.
+    var body: some View {
+        Canvas { context, size in
+            context.withCGContext { cg in
+                cg.translateBy(x: 0, y: size.height)
+                cg.scaleBy(x: 1, y: -1)
+                cg.setFillColor(colorScheme == .dark ? CGColor(gray: 1, alpha: 1) : CGColor(gray: 0, alpha: 1))
+                let resolver = FontResolver(preferredFamily: family)
+                let itemWidth = size.width / CGFloat(Self.items.count)
+                for (index, item) in Self.items.enumerated() {
+                    let rect = CGRect(x: CGFloat(index) * itemWidth, y: 0, width: itemWidth, height: size.height)
+                    GlyphDrawing.drawCentred(item, font: resolver.font(for: item, size: Self.size), in: rect, context: cg)
+                }
+            }
         }
     }
 }

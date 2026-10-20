@@ -263,7 +263,7 @@ final class AppController {
         CompatibilityReport(
             inputSource: SystemLayout.current(),
             keyboardType: SystemLayout.keyboardType(),
-            inputMonitoring: monitor?.hasPermission ?? false,
+            inputMonitoring: monitor?.hasPermission ?? CGPreflightListenEventAccess(),
             capsChangesOutput: labels?.capsChangesOutput ?? false,
             failedHotkeys: failedHotkeys
         )
@@ -455,6 +455,10 @@ final class AppController {
         panel.keyboardView.labels = SystemLayout.translator(forSourceID: "com.apple.keylayout.Thai").map {
             LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
         }
+        // So the Settings compatibility check reflects the real layout.
+        labels = SystemLayout.currentTranslator().map {
+            LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
+        }
         preview.apply(to: panel.keyboardView, fontFamilyOverride: prefs.fontFamily)
         statusMenu.update(isShown: true, actionItems: [])
         statusMenu.onToggleShow = { [weak panel] in
@@ -466,12 +470,6 @@ final class AppController {
             showSettings()
             if let path = preview.snapshotPath, let model = settingsModel {
                 DispatchQueue.main.async {
-                    // `ImageRenderer` shows a placeholder, not its real
-                    // content, for the font sample's `NSViewRepresentable`
-                    // (every other section renders correctly); the same
-                    // `GlyphDrawing.drawCentred` call it makes is already
-                    // checked for clean marks via the keyboard panel's own
-                    // `--snapshot`.
                     let ok = Self.writeSwiftUISnapshot(SettingsView(model: model).sections.frame(width: 460), to: path)
                     if ok { NSApp.terminate(nil) } else { exit(1) }
                 }
@@ -491,10 +489,7 @@ final class AppController {
     }
 
     /// Renders a SwiftUI view (used for the Settings window) straight to a
-    /// PNG via `ImageRenderer` — the content isn't drawn through
-    /// `-drawRect:` or a plain `CALayer`, so capturing its hosting window
-    /// (`cacheDisplay`, `CALayer.render(in:)`) comes back blank; rendering
-    /// the view itself is the documented way around that.
+    /// PNG via `ImageRenderer`.
     private static func writeSwiftUISnapshot(_ view: some View, to path: String) -> Bool {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
