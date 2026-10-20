@@ -3,18 +3,11 @@
 A small macOS menu-bar app that shows a floating on-screen keyboard whenever
 the Thai input source is active, so you can see where the Thai letters are
 while you type. It lights up each key as you press it. It's a learning aid
-that you build and run on your own Mac. There's no ready-made download:
-sharing a pre-built app would need a paid Apple Developer ID and
-notarisation, so instead each person builds it with Xcode, which is free.
-On your Mac the app is called **ThaiKeyboard**.
+for your own Mac. On your Mac the app is called **ThaiKeyboard**.
 
 ![The keyboard overlay: a MacBook keyboard with Thai characters on each key and the US letter in blue in the corner](docs/images/keyboard.png)
 
-## Install it on your Mac
-
-You need about 30 minutes, most of it waiting for Xcode to download.
-
-### 1. Check your Mac
+## Before you start
 
 - **macOS 26 or later.**
 - **A Thai input source turned on.** In **System Settings → Keyboard →
@@ -23,7 +16,40 @@ You need about 30 minutes, most of it waiting for Xcode to download.
 - The keyboard drawn is a MacBook (US/ANSI) keyboard. It still works with
   other keyboards, but the key shapes may not match yours.
 
-### 2. Install Xcode
+## Download the app
+
+1. Go to the [latest release](https://github.com/rcar-t/thai-keyboard-visualiser/releases/latest)
+   and download **ThaiKeyboard-<version>.zip**.
+2. Open the zip (double-click it in Downloads) and drag
+   **ThaiKeyboard.app** into your **Applications** folder.
+3. Open ThaiKeyboard from Applications. macOS will say it can't check the
+   app for malicious software, because it isn't signed with a paid Apple
+   Developer ID. Click **Done**, then allow it once:
+   1. Open **System Settings → Privacy & Security**.
+   2. Scroll down to the message saying ThaiKeyboard was blocked and click
+      **Open Anyway**.
+   3. Enter your Mac password and click **Open**.
+
+   (Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/ThaiKeyboard.app`,
+   then open it normally.)
+4. A **ก** appears in the menu bar. Allow key presses when macOS asks (see
+   [Granting Input Monitoring](#granting-input-monitoring)), then switch
+   your input source to Thai: the keyboard appears.
+
+**Updating:** download the new zip and replace the app in Applications.
+Each downloaded version counts as a new app to macOS, so after updating,
+remove ThaiKeyboard from **Privacy & Security → Input Monitoring** (select
+it and click **−**) and allow it again when asked.
+
+## Build it yourself
+
+If you'd rather build from the source code, you need Xcode (free). It
+takes about 30 minutes, most of it waiting for Xcode to download. A copy
+you build is signed with your own certificate, so macOS doesn't ask about
+it on first open, and keeps its Input Monitoring permission across
+updates.
+
+### 1. Install Xcode
 
 1. Install **Xcode** from the Mac App Store. It's free and large, so this
    takes a while.
@@ -37,7 +63,7 @@ You need about 30 minutes, most of it waiting for Xcode to download.
 
    It asks for your Mac password.
 
-### 3. Create your signing certificate
+### 2. Create your signing certificate
 
 macOS only lets the app keep its Input Monitoring permission if it's
 signed. A free Apple ID is enough.
@@ -65,7 +91,7 @@ signed. A free Apple ID is enough.
 
    Then run the check again.
 
-### 4. Get the code
+### 3. Get the code
 
 In Terminal:
 
@@ -78,7 +104,7 @@ cd thai-keyboard-visualiser
 (Or on the [project page](https://github.com/rcar-t/thai-keyboard-visualiser)
 click **Code → Download ZIP**, unzip it, and `cd` into the unzipped folder.)
 
-### 5. Build and install
+### 4. Build and install
 
 Still in the `thai-keyboard-visualiser` folder:
 
@@ -91,7 +117,7 @@ This builds the app, signs it with your certificate, installs it to
 menu bar. The app also adds itself to your login items so it starts when
 you log in (you can turn that off in Settings).
 
-### 6. Allow key presses
+### 5. Allow key presses
 
 macOS asks whether ThaiKeyboard may monitor input. Allow it (see
 [Granting Input Monitoring](#granting-input-monitoring) below).
@@ -109,7 +135,7 @@ scripts/build-app.sh
 Because it's signed with the same certificate, macOS keeps the Input
 Monitoring permission.
 
-### Uninstalling
+## Uninstalling
 
 1. Click **ก → Quit**.
 2. Delete `/Applications/ThaiKeyboard.app`.
@@ -184,4 +210,15 @@ swift test
 
 `scripts/build-app.sh` builds, signs, installs and relaunches in one step;
 run it after every change.
+
+## Making a release
+
+Push a version tag and the [Release workflow](.github/workflows/release.yml)
+builds a universal (Apple silicon and Intel) app, signs it ad hoc, and
+attaches `ThaiKeyboard-<version>.zip` to a new GitHub Release:
+
+```
+git tag v1.0.0
+git push origin v1.0.0
+```
 

@@ -64,7 +64,7 @@ public enum SystemLayout {
 
     /// The keyboard input sources the user has turned on that are Thai.
     public static func enabledThaiSources() -> [InputSourceInfo] {
-        let filter = [kTISPropertyInputSourceCategory: kTISCategoryKeyboardInputSource,
+        let filter = [kTISPropertyInputSourceCategory: kTISCategoryKeyboardInputSource as String,
                       kTISPropertyInputSourceIsSelectCapable: true] as CFDictionary
         guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource] else {
             return []
