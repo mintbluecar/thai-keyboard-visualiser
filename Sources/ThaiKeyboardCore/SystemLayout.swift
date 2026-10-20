@@ -62,6 +62,35 @@ public enum SystemLayout {
         return primary == "th" || primary.hasPrefix("th-")
     }
 
+    /// The keyboard input sources the user has turned on that are Thai.
+    public static func enabledThaiSources() -> [InputSourceInfo] {
+        let filter = [kTISPropertyInputSourceCategory: kTISCategoryKeyboardInputSource,
+                      kTISPropertyInputSourceIsSelectCapable: true] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource] else {
+            return []
+        }
+        return list.map(info(for:)).filter(\.isThai)
+    }
+
+    /// Which Thai source to switch to: the one used last if it's still
+    /// turned on, otherwise the first turned-on Thai source. `nil` when no
+    /// Thai source is turned on.
+    public static func thaiSourceToSelect(lastUsed: String?, enabled: [InputSourceInfo]) -> String? {
+        let thai = enabled.filter(\.isThai)
+        if let lastUsed, thai.contains(where: { $0.id == lastUsed }) { return lastUsed }
+        return thai.first?.id
+    }
+
+    /// Makes the turned-on input source with id `sourceID` the current one.
+    /// Returns `false` if it isn't turned on or selecting it failed.
+    @discardableResult
+    public static func select(sourceID: String) -> Bool {
+        let filter = [kTISPropertyInputSourceID: sourceID] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource],
+              let source = list.first else { return false }
+        return TISSelectInputSource(source) == noErr
+    }
+
     private static func installedSource(withID sourceID: String) -> TISInputSource? {
         let filter = [kTISPropertyInputSourceID: sourceID] as CFDictionary
         guard let list = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource] else {

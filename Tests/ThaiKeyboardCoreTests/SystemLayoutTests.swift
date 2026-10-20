@@ -27,4 +27,30 @@ final class SystemLayoutTests: XCTestCase {
         XCTAssertEqual(t.characters(keyCode: UInt16(kVK_ANSI_Q), state: .caps), "q")
         XCTAssertEqual(t.characters(keyCode: UInt16(kVK_ANSI_Y), state: .plain), "\u{0E31}")
     }
+
+    private let thai = InputSourceInfo(id: "com.apple.keylayout.Thai", name: "Thai", isThai: true)
+    private let pattachote = InputSourceInfo(id: "com.apple.keylayout.Thai-PattaChote", name: "Thai - Pattachote", isThai: true)
+    private let abc = InputSourceInfo(id: "com.apple.keylayout.ABC", name: "ABC", isThai: false)
+
+    func test_thaiSourceToSelectPrefersLastUsed() {
+        XCTAssertEqual(SystemLayout.thaiSourceToSelect(lastUsed: pattachote.id, enabled: [abc, thai, pattachote]), pattachote.id)
+    }
+
+    func test_thaiSourceToSelectFallsBackToFirstThai() {
+        XCTAssertEqual(SystemLayout.thaiSourceToSelect(lastUsed: nil, enabled: [abc, thai, pattachote]), thai.id)
+        XCTAssertEqual(SystemLayout.thaiSourceToSelect(lastUsed: "gone", enabled: [abc, pattachote]), pattachote.id)
+    }
+
+    func test_thaiSourceToSelectIgnoresNonThaiLastUsed() {
+        XCTAssertEqual(SystemLayout.thaiSourceToSelect(lastUsed: abc.id, enabled: [abc, thai]), thai.id)
+    }
+
+    func test_thaiSourceToSelectNilWithoutThai() {
+        XCTAssertNil(SystemLayout.thaiSourceToSelect(lastUsed: nil, enabled: [abc]))
+    }
+
+    func test_enabledThaiSourcesIncludesUsersThaiLayout() {
+        XCTAssertTrue(SystemLayout.enabledThaiSources().contains { $0.id == "com.apple.keylayout.Thai" },
+                      "Thai layout not turned on")
+    }
 }

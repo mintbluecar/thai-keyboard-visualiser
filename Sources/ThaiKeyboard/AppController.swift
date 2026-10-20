@@ -25,6 +25,11 @@ final class AppController {
     /// The most recent Thai layout's labels, drawn when the user shows the
     /// keyboard while a non-Thai source is active.
     private var thaiLabels: LabelTable?
+    /// The Thai input source used last, so Show can switch back to it.
+    private var lastThaiSourceID: String?
+    /// Show switched the input source to Thai: keep the keyboard shown
+    /// through the source change that follows, even with Caps Lock on.
+    private var showAfterSwitchToThai = false
     private var pressed = PressedKeys()
     /// Runs only while `pressed.needsReconcile`; see `updateReconcileTimer`.
     private var reconcileTimer: Timer?
@@ -104,12 +109,20 @@ final class AppController {
         labels = SystemLayout.currentTranslator().map {
             LabelTable(translator: $0, keyCodes: MacBookANSI.characterKeyCodes)
         }
-        let isThai = SystemLayout.current().isThai
-        if isThai { thaiLabels = labels }
+        let current = SystemLayout.current()
+        let isThai = current.isThai
+        if isThai {
+            thaiLabels = labels
+            lastThaiSourceID = current.id
+        }
         // When Show keyboard is used outside Thai, still draw Thai labels:
         // the last Thai layout seen, else the built-in Thai layout.
         panel.keyboardView.labels = isThai ? labels : (thaiLabels ?? Self.builtInThaiLabels())
         visibility.inputSourceChanged(isThai: isThai)
+        if showAfterSwitchToThai, isThai {
+            showAfterSwitchToThai = false
+            visibility.userShow()
+        }
         pressed.reset()
         recompute()
         onCompatibilityChanged?()
@@ -139,8 +152,21 @@ final class AppController {
             visibility.userHide()
         } else {
             visibility.userShow()
+            switchToThaiIfNeeded()
         }
         recompute()
+    }
+
+    /// Show while typing in another language switches the input source to
+    /// Thai (the one used last, else the first turned on), so the keyboard
+    /// matches what the keys type. With no Thai source turned on, the
+    /// keyboard still shows, with Thai labels.
+    private func switchToThaiIfNeeded() {
+        guard !SystemLayout.current().isThai,
+              let id = SystemLayout.thaiSourceToSelect(lastUsed: lastThaiSourceID,
+                                                       enabled: SystemLayout.enabledThaiSources()),
+              SystemLayout.select(sourceID: id) else { return }
+        showAfterSwitchToThai = true
     }
 
     private func userHide() {
