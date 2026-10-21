@@ -18,7 +18,7 @@ for your own Mac. On your Mac the app is called **ThaiKeyboard**.
 
 ## Download the app
 
-1. Go to the [latest release](https://github.com/rcar-t/thai-keyboard-visualiser/releases/latest)
+1. Go to the [latest release](https://github.com/mintbluecar/thai-keyboard-visualiser/releases/latest)
    and download **ThaiKeyboard-<version>.zip**.
 2. Open the zip (double-click it in Downloads) and drag
    **ThaiKeyboard.app** into your **Applications** folder.
@@ -97,11 +97,11 @@ In Terminal:
 
 ```
 cd ~/Downloads
-git clone https://github.com/rcar-t/thai-keyboard-visualiser.git
+git clone https://github.com/mintbluecar/thai-keyboard-visualiser.git
 cd thai-keyboard-visualiser
 ```
 
-(Or on the [project page](https://github.com/rcar-t/thai-keyboard-visualiser)
+(Or on the [project page](https://github.com/mintbluecar/thai-keyboard-visualiser)
 click **Code → Download ZIP**, unzip it, and `cd` into the unzipped folder.)
 
 ### 4. Build and install
